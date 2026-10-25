@@ -186,7 +186,7 @@ void dibujarImagenPastillero(int x, int y)
 void dibujarPantallaInicio(void)
 {
     Nueva_pantalla(255,255,255);
-    ComColor(10,98,250);
+    ComColor(148,170,255);
     ComRect(0,0,480,50,true);
     ComColor(255,255,255);
     ComTXT(240, 20, 22, OPT_CENTERX, "ASISTENTE DE MEDICACION");
@@ -199,19 +199,19 @@ void dibujarPantallaInicio(void)
     ComTXT(170, 60, 29, OPT_CENTERX, textoHora);
     ComColor(148,147,130);
     if (horas<12 && horas>=6){
-        ComTXT(330,60,29,OPT_CENTERX,"BUENOS DIAS");
+        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
     }
     else if (horas >= 12 && horas < 21){
-        ComTXT(330,60,29,OPT_CENTERX,"BUENOS DIAS");
+        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
     }
     else {
-        ComTXT(330,60,29,OPT_CENTERX,"BUENOS DIAS");
+        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
     }
 
     ComColor(9,237,16);
-    ComRect(20,100,460,230,true);
+    ComRect(20,100,460,225,true);
     ComColor(99,212,101);
-    ComRect(22,98,458,228,true);
+    ComRect(22,102,458,223,true);
     dibujarImagenPastillero(30, 105); // Imagen del pastillero
 
 
@@ -220,7 +220,7 @@ void dibujarPantallaInicio(void)
 
 
     //Botones
-    BotonCuidador = Boton(310, 240, 100, 30, 20, "MODO CUIDADOR");
+    BotonCuidador = Boton(310, 233, 100, 35, 20, "MODO CUIDADOR");
 
 
     Dibuja();
