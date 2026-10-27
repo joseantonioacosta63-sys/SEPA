@@ -7,11 +7,10 @@ static Toma tomas[NUM_TOMAS];
 
 void inicializarMedicacion(void)
 {
-    tomas[0] = (Toma){"Medicacion A", 9, 0, PROGRAMADA};
-    tomas[1] = (Toma){"Medicacion B", 14, 0, PROGRAMADA};
-    tomas[2] = (Toma){"Medicacion C", 21, 0, PROGRAMADA};
+    tomas[0] = (Toma){"MEDICACION A", 9, 0, PROGRAMADA};
+    tomas[1] = (Toma){"MEDICACION B", 14, 0, PROGRAMADA};
+    tomas[2] = (Toma){"MEDICACION C", 21, 0, PROGRAMADA};
 }
-
 
 void gestionarMedicacion(void)
 {
@@ -24,11 +23,9 @@ void gestionarMedicacion(void)
 
     for (i = 0; i < NUM_TOMAS; i++)
     {
-        uint16_t minutosToma =
-            tomas[i].hora * 60 + tomas[i].minuto;
+        uint16_t minutosToma = tomas[i].hora * 60 + tomas[i].minuto;
 
-        if (tomas[i].estado == PROGRAMADA &&
-                minutosActuales >= minutosToma)
+        if (tomas[i].estado == PROGRAMADA && minutosActuales >= minutosToma)
         {
             tomas[i].estado = PENDIENTE;
         }
@@ -58,6 +55,21 @@ const Toma *obtenerToma(uint8_t indice)
     {
         return NULL;
     }
+}
+
+int obtenerProximaMedicacion(void)
+{
+    uint8_t i;
+
+    for (i = 0; i < NUM_TOMAS; i++)
+    {
+        if (tomas[i].estado != CONFIRMADA)
+        {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 

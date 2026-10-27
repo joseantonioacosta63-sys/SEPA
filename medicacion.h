@@ -28,5 +28,6 @@ void inicializarMedicacion(void);
 void gestionarMedicacion(void);
 void confirmarToma(uint8_t indice);
 const Toma *obtenerToma(uint8_t indice);
+int obtenerProximaMedicacion(void);
 
 #endif

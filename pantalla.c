@@ -12,6 +12,7 @@
 #include "pantalla.h"
 #include <stdio.h>
 #include "reloj.h"
+#include "medicacion.h"
 
 #define IMAGEN_DIRECCION 0
 #define IMAGEN_RGB565    7
@@ -213,8 +214,22 @@ void dibujarPantallaInicio(void)
     ComColor(99,212,101);
     ComRect(22,102,458,223,true);
     dibujarImagenPastillero(30, 105); // Imagen del pastillero
+    ComColor(31,107,22);
+    ComRect(210,110,410,140,true);
+    ComColor(255,255,255);
+    ComTXT(310,115,22,OPT_CENTERX,"PROXIMA PASTILLA:");
 
-
+    const Toma *toma;
+    int proxima;
+    char proximaHora[9];
+    proxima = obtenerProximaMedicacion();
+    if (proxima!=-1){
+        toma = obtenerToma(proxima);
+        ComColor(0,0,0);
+        sprintf(proximaHora, "%02u:%02u", (unsigned int)toma->hora, (unsigned int)toma->minuto);
+        ComTXT(310, 153, 30, OPT_CENTERX, proximaHora);
+        ComTXT(310, 195, 28, OPT_CENTERX, toma->nombre);
+    }
 
 
 
