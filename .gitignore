@@ -1,0 +1,13 @@
+# Archivos de compilacion de CCS
+Debug/
+Release/
+
+# Configuraciones locales de depuracion
+.launches/
+
+# Preferencias locales de CCS
+.settings/
+
+# Biblioteca de sensores no utilizada
+SENSORLIB2.lib
+sensorlib2.h
