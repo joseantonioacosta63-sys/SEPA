@@ -203,10 +203,10 @@ void dibujarPantallaInicio(void)
         ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
     }
     else if (horas >= 12 && horas < 21){
-        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
+        ComTXT(325,60,29,OPT_CENTERX,"BUENOS TARDES");
     }
     else {
-        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
+        ComTXT(325,60,29,OPT_CENTERX,"BUENOS NOCHES");
     }
 
     ComColor(9,237,16);
@@ -219,16 +219,19 @@ void dibujarPantallaInicio(void)
     ComColor(255,255,255);
     ComTXT(310,115,22,OPT_CENTERX,"PROXIMA PASTILLA:");
 
-    const Toma *toma;
-    int proxima;
+    const MedicConfig *medicamento;
+    const HorarioConfig *horario;
+    uint8_t indiceMedicamento;
+    uint8_t indiceHorario;
     char proximaHora[9];
-    proxima = obtenerProximaMedicacion();
-    if (proxima!=-1){
-        toma = obtenerToma(proxima);
+
+    if (obtenerProximaToma(&indiceMedicamento, &indiceHorario)){
+        medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
+        horario = obtenerHorarioConfigurado(indiceMedicamento, indiceHorario);
         ComColor(0,0,0);
-        sprintf(proximaHora, "%02u:%02u", (unsigned int)toma->hora, (unsigned int)toma->minuto);
+        sprintf(proximaHora, "%02u:%02u", (unsigned int)horario->hora, (unsigned int)horario->minuto);
         ComTXT(310, 153, 30, OPT_CENTERX, proximaHora);
-        ComTXT(310, 195, 28, OPT_CENTERX, toma->nombre);
+        ComTXT(310, 195, 28, OPT_CENTERX, medicamento->nombre);
     }
 
 
