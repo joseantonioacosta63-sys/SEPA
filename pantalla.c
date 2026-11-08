@@ -21,6 +21,8 @@
 
 static bool imagenCargada = false;
 int BotonCuidador=0;
+int BotonVolver=0;
+int BotonConfirmar=0;
 
 // Funcion auxiliar para controlar el FIFO
 static bool esperarEspacio(uint16_t bytes)
@@ -233,6 +235,11 @@ void dibujarPantallaInicio(void)
         ComTXT(310, 153, 30, OPT_CENTERX, proximaHora);
         ComTXT(310, 195, 28, OPT_CENTERX, medicamento->nombre);
     }
+    else
+    {
+        ComColor(255, 0, 0);
+        ComTXT(310, 160, 22, OPT_CENTERX, "SIN PROXIMA TOMA");
+    }
 
 
 
@@ -243,4 +250,119 @@ void dibujarPantallaInicio(void)
 
     Dibuja();
 }
+
+void dibujarPantallaCuidador(void){
+    const EstadoDiarioHorario *estadoA;
+    estadoA = obtenerEstadoDiarioHorario(0, 0);
+    Nueva_pantalla(255,255,255);
+    ComColor(148,170,255);
+    ComRect(0,0,480,50,true);
+    ComColor(255,255,255);
+    ComTXT(240, 20, 22, OPT_CENTERX, "MODO CUIDADOR");
+    ComColor(0,0,0);
+    ComTXT(40, 60, 22, 0, "MEDICACIONES DE HOY");
+    ComColor(222,215,215);
+    ComRect(15,90,465,125,true);
+    ComRect(15,135,465,170,true);
+    ComRect(15,180,465,215,true);
+    ComColor(0,0,0);
+    ComTXT(30, 95, 20, 0, "09:00 / MEDICACION A");
+    if (estadoA != NULL)
+    {
+        if (estadoA->estado == CONFIRMADA)
+        {
+            ComColor(30,201,30);
+            ComTXT(40, 115, 20, 0, "CONFIRMADA");
+            Boton(400, 90, 65, 35, 20, "TOMADA");
+        }
+        else if (estadoA->estado == PENDIENTE)
+        {
+            ComColor(204,124,0);
+            ComTXT(40, 115, 20, 0, "PENDIENTE");
+            ComColor(15,199,12);
+            BotonConfirmar = Boton(400, 90, 65, 35, 20, "CONFIRMAR");
+        }
+        else if (estadoA->estado == REVISAR)
+        {
+            ComColor(240,0,0);
+            ComTXT(40, 115, 20, 0, "REVISAR");
+            Boton(400, 90, 65, 35, 20, "Tomada");
+        }
+        else
+        {
+            ComColor(148,135,135);
+            ComTXT(40, 115, 20, 0, "PROGRAMADA");
+            Boton(400, 90, 65, 35, 20, "ESPERAR");
+        }
+    }
+    ComColor(0,0,0);
+    ComTXT(30, 140, 20, 0, "14:00 / MEDICACION B");
+    if (estadoA != NULL)
+        {
+            if (estadoA->estado == CONFIRMADA)
+            {
+                ComColor(30,201,30);
+                ComTXT(40, 160, 20, 0, "CONFIRMADA");
+                Boton(400, 135, 65, 35, 20, "TOMADA");
+            }
+            else if (estadoA->estado == PENDIENTE)
+            {
+                ComColor(204,124,0);
+                ComTXT(40, 160, 20, 0, "PENDIENTE");
+                ComColor(15,199,12);
+                BotonConfirmar = Boton(400, 135, 65, 35, 20, "CONFIRMAR");
+            }
+            else if (estadoA->estado == REVISAR)
+            {
+                ComColor(240,0,0);
+                ComTXT(40, 160, 20, 0, "REVISAR");
+            }
+            else
+            {
+                ComColor(148,135,135);
+                ComTXT(40, 160, 20, 0, "PROGRAMADA");
+                Boton(400, 135, 65, 35, 20, "ESPERAR");
+            }
+        }
+    ComColor(0,0,0);
+    ComTXT(30, 185, 20, 0, "21:00 / MEDICACION C");
+    if (estadoA != NULL)
+        {
+            if (estadoA->estado == CONFIRMADA)
+            {
+                ComColor(30,201,30);
+                ComTXT(40, 205, 20, 0, "CONFIRMADA");
+                Boton(400, 180, 65, 35, 20, "TOMADA");
+
+            }
+            else if (estadoA->estado == PENDIENTE)
+            {
+                ComColor(204,124,0);
+                ComTXT(40, 205, 20, 0, "PENDIENTE");
+                ComColor(15,199,12);
+                BotonConfirmar = Boton(400, 180, 65, 35, 20, "CONFIRMAR");
+            }
+            else if (estadoA->estado == REVISAR)
+            {
+                ComColor(240,0,0);
+                ComTXT(40, 205, 20, 0, "REVISAR");
+            }
+            else
+            {
+                ComColor(148,135,135);
+                ComTXT(40, 205, 20, 0, "PROGRAMADA");
+                Boton(400, 180, 65, 35, 20, "ESPERAR");
+            }
+        }
+
+
+
+
+
+    //Boton para volver a la primera interfaz
+    ComColor(252,30,30);
+    BotonVolver = Boton(210, 230, 90, 35, 20, "VOLVER A INICIO");
+    Dibuja();
+}
+
 

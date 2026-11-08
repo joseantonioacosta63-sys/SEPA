@@ -428,9 +428,23 @@ static void reiniciarEstadosDiarios(void)
 
 void inicializarMedicacion(void)
 {
-    /* Los estados son diarios; por eso nunca se recuperan desde EEPROM. */
     reiniciarEstadosDiarios();
-    cargarConfiguracionMedicacion();
+
+    if (!cargarConfiguracionMedicacion())
+    {
+        // Crear los tres medicamentos por defecto
+        crearMedicamento(0, "Medicacion A");
+        crearMedicamento(1, "Medicacion B");
+        crearMedicamento(2, "Medicacion C");
+
+        // Asignar un horario diario a cada medicamento
+        agregarHorarioMedicamento(0, 9, 0, DIA_TODOS);
+        agregarHorarioMedicamento(1, 14, 0, DIA_TODOS);
+        agregarHorarioMedicamento(2, 21, 0, DIA_TODOS);
+
+        // Intentar guardar la configuracion en EEPROM
+        guardarConfiguracionMedicacion();
+    }
 }
 
 void gestionarMedicacion(void)
@@ -542,64 +556,58 @@ bool confirmarToma(uint8_t indiceMedicamento, uint8_t indiceHorario)
 bool obtenerProximaToma(uint8_t *indiceMedicamentoResultado,
                         uint8_t *indiceHorarioResultado)
 {
-    uint8_t horaActual;
-    uint8_t minutoActual;
-    uint8_t segundoActual;
-    uint8_t indiceMedicamento;
-    uint8_t indiceHorario;
-    uint32_t segundosActuales;
-    uint32_t segundosProgramados;
-    uint32_t menorDiferencia = 86401U;
+    uint8_t i, j;
+    uint32_t minutosToma;
+    uint32_t menorMinuto = 1440U;
+    bool encontrada = false;
+
     const MedicConfig *medicamento;
     const HorarioConfig *horario;
 
-    if (indiceMedicamentoResultado == NULL || indiceHorarioResultado == NULL ||
+    if (indiceMedicamentoResultado == NULL ||
+        indiceHorarioResultado == NULL ||
         !hayConfiguracionMedicacion())
     {
         return false;
     }
 
-    obtenerHora(&horaActual, &minutoActual, &segundoActual);
-    segundosActuales = (uint32_t)horaActual * 3600U +
-                        (uint32_t)minutoActual * 60U + segundoActual;
-
-    for (indiceMedicamento = 0; indiceMedicamento < MAX_MEDICAMENTOS;
-         indiceMedicamento++)
+    for (i = 0; i < MAX_MEDICAMENTOS; i++)
     {
-        medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
+        medicamento = obtenerMedicamentoConfigurado(i);
 
         if (medicamento == NULL)
         {
             continue;
         }
 
-        for (indiceHorario = 0; indiceHorario < medicamento->horariosUsados;
-             indiceHorario++)
+        for (j = 0; j < medicamento->horariosUsados; j++)
         {
-            horario = &medicamento->horarios[indiceHorario];
+            horario = &medicamento->horarios[j];
 
             if (horario->diasSemana != DIA_TODOS)
             {
                 continue;
             }
 
-            segundosProgramados = (uint32_t)horario->hora * 3600U +
-                                  (uint32_t)horario->minuto * 60U;
-
-            if (segundosProgramados > segundosActuales &&
-                segundosProgramados - segundosActuales < menorDiferencia)
+            if (estadosDiarios[i][j].estado == CONFIRMADA)
             {
-                menorDiferencia = segundosProgramados - segundosActuales;
-                *indiceMedicamentoResultado = indiceMedicamento;
-                *indiceHorarioResultado = indiceHorario;
+                continue;
+            }
+
+            minutosToma = horario->hora * 60U + horario->minuto;
+
+            if (minutosToma < menorMinuto)
+            {
+                menorMinuto = minutosToma;
+                *indiceMedicamentoResultado = i;
+                *indiceHorarioResultado = j;
+                encontrada = true;
             }
         }
     }
 
-    return (menorDiferencia != 86401U);
+    return encontrada;
 }
-
-
 
 
 

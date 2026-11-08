@@ -12,6 +12,7 @@
 #define FREC 50
 
 int RELOJ;
+uint8_t pantallaActual = 0;
 
 // Numero de interrupciones pendientes de procesar
 volatile uint32_t ticksPendientes = 0;
@@ -106,8 +107,28 @@ int main(void)
         {
             contadorPantalla = contadorPantalla % 5;
 
-            dibujarPantallaInicio();
+            if (pantallaActual == 0)
+            {
+                dibujarPantallaInicio();
+            }
+            else if (pantallaActual == 1)
+            {
+                dibujarPantallaCuidador();
+            }
         }
+        if (pantallaActual == 0 && BotonCuidador != 0)
+        {
+            pantallaActual = 1;
+            BotonCuidador = 0;
+            BotonVolver = 0;
+        }
+        else if (pantallaActual == 1 && BotonVolver != 0)
+        {
+            pantallaActual = 0;
+            BotonCuidador = 0;
+            BotonVolver = 0;
+        }
+
     }
 }
 

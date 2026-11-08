@@ -10,6 +10,8 @@
 
 void cargarImagenPastillero(void);
 void dibujarImagenPastillero(int x, int y);
-
-
+void dibujarPantallaInicio(void);
+void dibujarPantallaCuidador(void);
+extern int BotonCuidador;
+extern int BotonVolver;
 #endif /* PANTALLA_H_ */
