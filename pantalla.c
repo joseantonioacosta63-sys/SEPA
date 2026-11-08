@@ -20,9 +20,12 @@
 #define ESPERA_MAX       2000000UL
 
 static bool imagenCargada = false;
+<<<<<<< HEAD
 int BotonCuidador=0;
 int BotonVolver=0;
 int BotonConfirmar=0;
+=======
+>>>>>>> 11610b4 (Completar logica configurable de medicacion y reloj semanal)
 
 // Funcion auxiliar para controlar el FIFO
 static bool esperarEspacio(uint16_t bytes)
@@ -244,8 +247,8 @@ void dibujarPantallaInicio(void)
 
 
 
-    //Botones
-    BotonCuidador = Boton(310, 233, 100, 35, 20, "MODO CUIDADOR");
+    /* Por ahora el boton solo se dibuja y cambia de aspecto al tocarlo. */
+    (void)Boton(310, 233, 100, 35, 20, "MODO CUIDADOR");
 
 
     Dibuja();

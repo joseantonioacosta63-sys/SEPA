@@ -5,20 +5,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "reloj.h"
 #define MAX_MEDICAMENTOS 8 //numero maximo de medicamentos que se podran almacenar
 #define MAX_HORARIOS_MEDICAMENTOS 3 //numero maximo de horarios por medicamento por cada dia
 #define MAX_NOMBRES_MEDICAMENTOS 24 //numero maximo de caracteres para los medicamentos
-
-//definiciones de los bits asociados a cada dia en diasSemana de la estructura HorarioConfig
-#define DIA_LUNES (1U << 0)
-#define DIA_MARTES (1U << 1)
-#define DIA_MIERCOLES (1U << 2)
-#define DIA_JUEVES (1U << 3)
-#define DIA_VIERNES (1U << 4)
-#define DIA_SABADO (1U << 5)
-#define DIA_DOMINGO (1U << 6)
-#define DIA_TODOS (DIA_LUNES | DIA_MARTES | DIA_MIERCOLES | DIA_JUEVES | DIA_VIERNES | DIA_SABADO | DIA_DOMINGO)
-
 
 typedef struct //estructura que define los horarios distintos programables con su hora, minuto y dias de la semana
 {
@@ -43,9 +33,12 @@ typedef enum
     REVISAR
 } EstadoToma;
 
-typedef struct //estructura que define el estado de cada toma de cada medicacion
+/* Estado de ejecucion de un horario y su unica incidencia pendiente de revisar. */
+typedef struct
 {
     EstadoToma estado;
+    uint32_t numeroDiaProgramado;
+    bool revisionPendiente;
 } EstadoDiarioHorario;
 
 // Funciones publicas
@@ -60,6 +53,7 @@ bool hayConfiguracionMedicacion(void);
 const MedicConfig *obtenerMedicamentoConfigurado(uint8_t indiceMedicamento);
 const HorarioConfig *obtenerHorarioConfigurado(uint8_t indiceMedicamento, uint8_t indiceHorario);
 const EstadoDiarioHorario *obtenerEstadoDiarioHorario(uint8_t indiceMedicamento, uint8_t indiceHorario);
+bool tieneRevisionPendiente(uint8_t indiceMedicamento, uint8_t indiceHorario);
 
 /* Opera sobre una toma concreta: medicamento y uno de sus horarios. */
 bool confirmarToma(uint8_t indiceMedicamento, uint8_t indiceHorario);
