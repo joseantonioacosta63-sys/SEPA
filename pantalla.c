@@ -7,12 +7,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "utils/uartstdio.h"
+
 #include "FT800_TIVA.h"
 #include "pastillero_imagen.h"
 #include "pantalla.h"
 #include <stdio.h>
 #include "reloj.h"
 #include "medicacion.h"
+
+extern float T_act;
 
 #define IMAGEN_DIRECCION 0
 #define IMAGEN_RGB565    7
@@ -22,7 +26,10 @@
 static bool imagenCargada = false;
 int BotonCuidador=0;
 int BotonVolver=0;
-int BotonConfirmar=0;
+int BotonConfirmarA=0;
+int BotonConfirmarB=0;
+int BotonConfirmarC=0;
+
 
 // Funcion auxiliar para controlar el FIFO
 static bool esperarEspacio(uint16_t bytes)
@@ -188,6 +195,9 @@ void dibujarImagenPastillero(int x, int y)
 
 void dibujarPantallaInicio(void)
 {
+    char textoTemperatura[30];
+    char avisoCalor[30];
+    char avisoFrio[30];
     Nueva_pantalla(255,255,255);
     ComColor(148,170,255);
     ComRect(0,0,480,50,true);
@@ -241,19 +251,41 @@ void dibujarPantallaInicio(void)
         ComTXT(310, 160, 22, OPT_CENTERX, "SIN PROXIMA TOMA");
     }
 
+    sprintf(textoTemperatura, "%.1f C", T_act);
+    ComColor(0, 0, 0);
+    ComTXT(50, 240, 22, OPT_CENTERX, textoTemperatura);
 
+    if (T_act >= 30)
+    {
+        sprintf(avisoCalor, "HACE CALOR, PON EL AIRE", T_act);
+        ComColor(255,3,0);
+        ComTXT(80, 240, 22, 0, avisoCalor);
+    }
+    else
+    {
+        sprintf(avisoFrio, "HACE FRIO, PON LA ESTUFA", T_act);
+        ComColor(0,61,194);
+        ComTXT(80, 240, 22, 0, avisoFrio);
+    }
 
-
-    /* Por ahora el boton solo se dibuja y cambia de aspecto al tocarlo. */
-    (void)Boton(310, 233, 100, 35, 20, "MODO CUIDADOR");
-
+    //Botones
+    ComColor(224,184,65);
+    BotonCuidador = Boton(330, 233, 100, 35, 20, "MODO CUIDADOR");
 
     Dibuja();
 }
 
 void dibujarPantallaCuidador(void){
+
+    BotonConfirmarA = 0;
+    BotonConfirmarB = 0;
+    BotonConfirmarC = 0;
     const EstadoDiarioHorario *estadoA;
+    const EstadoDiarioHorario *estadoB;
+    const EstadoDiarioHorario *estadoC;
     estadoA = obtenerEstadoDiarioHorario(0, 0);
+    estadoB = obtenerEstadoDiarioHorario(1, 0);
+    estadoC = obtenerEstadoDiarioHorario(2, 0);
     Nueva_pantalla(255,255,255);
     ComColor(148,170,255);
     ComRect(0,0,480,50,true);
@@ -273,6 +305,7 @@ void dibujarPantallaCuidador(void){
         {
             ComColor(30,201,30);
             ComTXT(40, 115, 20, 0, "CONFIRMADA");
+            ComColor(212,212,76);
             Boton(400, 90, 65, 35, 20, "TOMADA");
         }
         else if (estadoA->estado == PENDIENTE)
@@ -280,13 +313,11 @@ void dibujarPantallaCuidador(void){
             ComColor(204,124,0);
             ComTXT(40, 115, 20, 0, "PENDIENTE");
             ComColor(15,199,12);
-            BotonConfirmar = Boton(400, 90, 65, 35, 20, "CONFIRMAR");
-        }
-        else if (estadoA->estado == REVISAR)
-        {
-            ComColor(240,0,0);
-            ComTXT(40, 115, 20, 0, "REVISAR");
-            Boton(400, 90, 65, 35, 20, "Tomada");
+            BotonConfirmarA = Boton(400, 90, 65, 35, 20, "CONFIRMAR");
+            if (BotonConfirmarA != 0)
+            {
+                UARTprintf("BOTON A: X=%d, Y=%d\r\n", POSX, POSY);
+            }
         }
         else
         {
@@ -297,25 +328,21 @@ void dibujarPantallaCuidador(void){
     }
     ComColor(0,0,0);
     ComTXT(30, 140, 20, 0, "14:00 / MEDICACION B");
-    if (estadoA != NULL)
+    if (estadoB != NULL)
         {
-            if (estadoA->estado == CONFIRMADA)
+            if (estadoB->estado == CONFIRMADA)
             {
                 ComColor(30,201,30);
                 ComTXT(40, 160, 20, 0, "CONFIRMADA");
+                ComColor(212,212,76);
                 Boton(400, 135, 65, 35, 20, "TOMADA");
             }
-            else if (estadoA->estado == PENDIENTE)
+            else if (estadoB->estado == PENDIENTE)
             {
                 ComColor(204,124,0);
                 ComTXT(40, 160, 20, 0, "PENDIENTE");
                 ComColor(15,199,12);
-                BotonConfirmar = Boton(400, 135, 65, 35, 20, "CONFIRMAR");
-            }
-            else if (estadoA->estado == REVISAR)
-            {
-                ComColor(240,0,0);
-                ComTXT(40, 160, 20, 0, "REVISAR");
+                BotonConfirmarB = Boton(400, 135, 65, 35, 20, "CONFIRMAR");
             }
             else
             {
@@ -326,26 +353,22 @@ void dibujarPantallaCuidador(void){
         }
     ComColor(0,0,0);
     ComTXT(30, 185, 20, 0, "21:00 / MEDICACION C");
-    if (estadoA != NULL)
+    if (estadoC != NULL)
         {
-            if (estadoA->estado == CONFIRMADA)
+            if (estadoC->estado == CONFIRMADA)
             {
                 ComColor(30,201,30);
                 ComTXT(40, 205, 20, 0, "CONFIRMADA");
+                ComColor(212,212,76);
                 Boton(400, 180, 65, 35, 20, "TOMADA");
 
             }
-            else if (estadoA->estado == PENDIENTE)
+            else if (estadoC->estado == PENDIENTE)
             {
                 ComColor(204,124,0);
                 ComTXT(40, 205, 20, 0, "PENDIENTE");
                 ComColor(15,199,12);
-                BotonConfirmar = Boton(400, 180, 65, 35, 20, "CONFIRMAR");
-            }
-            else if (estadoA->estado == REVISAR)
-            {
-                ComColor(240,0,0);
-                ComTXT(40, 205, 20, 0, "REVISAR");
+                BotonConfirmarC = Boton(400, 180, 65, 35, 20, "CONFIRMAR");
             }
             else
             {

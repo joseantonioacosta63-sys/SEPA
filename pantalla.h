@@ -14,4 +14,7 @@ void dibujarPantallaInicio(void);
 void dibujarPantallaCuidador(void);
 extern int BotonCuidador;
 extern int BotonVolver;
+extern int BotonConfirmarA;
+extern int BotonConfirmarB;
+extern int BotonConfirmarC;
 #endif /* PANTALLA_H_ */
