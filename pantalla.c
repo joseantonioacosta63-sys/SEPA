@@ -257,16 +257,15 @@ void dibujarPantallaInicio(void)
 
     if (T_act >= 30)
     {
-        sprintf(avisoCalor, "HACE CALOR, PON EL AIRE", T_act);
-        ComColor(255,3,0);
-        ComTXT(80, 240, 22, 0, avisoCalor);
+        ComColor(255, 3, 0);
+        ComTXT(80, 240, 22, 0, "HACE CALOR, PON EL AIRE");
     }
-    else
+    else if (T_act <= 20)
     {
-        sprintf(avisoFrio, "HACE FRIO, PON LA ESTUFA", T_act);
-        ComColor(0,61,194);
-        ComTXT(80, 240, 22, 0, avisoFrio);
+        ComColor(0, 61, 194);
+        ComTXT(80, 240, 22, 0, "HACE FRIO, PON LA ESTUFA");
     }
+
 
     //Botones
     ComColor(224,184,65);
