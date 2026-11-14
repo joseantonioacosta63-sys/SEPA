@@ -193,197 +193,190 @@ void dibujarImagenPastillero(int x, int y)
         EscribeRam32(CMD_RESTORE_CONTEXT);
 }
 
-void dibujarPantallaInicio(void)
+/* Escribe una linea con etiqueta, hora y nombre de una toma. */
+static void dibujarResumenToma(char *etiqueta, int y, bool encontrada,
+                               uint8_t indiceMedicamento, uint8_t indiceHorario)
 {
-    char textoTemperatura[30];
-    char avisoCalor[30];
-    char avisoFrio[30];
-    Nueva_pantalla(255,255,255);
-    ComColor(148,170,255);
-    ComRect(0,0,480,50,true);
-    ComColor(255,255,255);
-    ComTXT(240, 20, 22, OPT_CENTERX, "ASISTENTE DE MEDICACION");
-
-    uint8_t horas, minutos, segundos;
-    char textoHora[9];
-    obtenerHora(&horas, &minutos, &segundos);
-    sprintf(textoHora, "%02u:%02u:%02u", (unsigned int)horas, (unsigned int)minutos, (unsigned int)segundos);
-    ComColor(0,0,0);
-    ComTXT(170, 60, 29, OPT_CENTERX, textoHora);
-    ComColor(148,147,130);
-    if (horas<12 && horas>=6){
-        ComTXT(325,60,29,OPT_CENTERX,"BUENOS DIAS");
-    }
-    else if (horas >= 12 && horas < 21){
-        ComTXT(325,60,29,OPT_CENTERX,"BUENOS TARDES");
-    }
-    else {
-        ComTXT(325,60,29,OPT_CENTERX,"BUENOS NOCHES");
-    }
-
-    ComColor(9,237,16);
-    ComRect(20,100,460,225,true);
-    ComColor(99,212,101);
-    ComRect(22,102,458,223,true);
-    dibujarImagenPastillero(30, 105); // Imagen del pastillero
-    ComColor(31,107,22);
-    ComRect(210,110,410,140,true);
-    ComColor(255,255,255);
-    ComTXT(310,115,22,OPT_CENTERX,"PROXIMA PASTILLA:");
-
+    char texto[56];
     const MedicConfig *medicamento;
     const HorarioConfig *horario;
-    uint8_t indiceMedicamento;
-    uint8_t indiceHorario;
-    char proximaHora[9];
 
-    if (obtenerProximaToma(&indiceMedicamento, &indiceHorario)){
-        medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
-        horario = obtenerHorarioConfigurado(indiceMedicamento, indiceHorario);
-        ComColor(0,0,0);
-        sprintf(proximaHora, "%02u:%02u", (unsigned int)horario->hora, (unsigned int)horario->minuto);
-        ComTXT(310, 153, 30, OPT_CENTERX, proximaHora);
-        ComTXT(310, 195, 28, OPT_CENTERX, medicamento->nombre);
+    if (!encontrada)
+    {
+        sprintf(texto, "%s: --", etiqueta);
     }
     else
     {
-        ComColor(255, 0, 0);
-        ComTXT(310, 160, 22, OPT_CENTERX, "SIN PROXIMA TOMA");
+        medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
+        horario = obtenerHorarioConfigurado(indiceMedicamento, indiceHorario);
+        sprintf(texto, "%s: %02u:%02u  %s", etiqueta,
+                (unsigned int)horario->hora, (unsigned int)horario->minuto,
+                medicamento->nombre);
     }
 
-    sprintf(textoTemperatura, "%.1f C", T_act);
     ComColor(0, 0, 0);
-    ComTXT(50, 240, 22, OPT_CENTERX, textoTemperatura);
+    ComTXT(180, y, 26, 0, texto);
+}
 
-    if (T_act >= 30)
+/* Dibuja una fila del cuidador para uno de los tres medicamentos de prueba. */
+static void dibujarFilaCuidador(uint8_t indiceMedicamento, int y,
+                                int *botonConfirmar)
+{
+    char texto[48];
+    const MedicConfig *medicamento;
+    const HorarioConfig *horario;
+    const EstadoDiarioHorario *estado;
+
+    *botonConfirmar = 0;
+    medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
+    horario = obtenerHorarioConfigurado(indiceMedicamento, 0);
+    estado = obtenerEstadoDiarioHorario(indiceMedicamento, 0);
+
+    if (medicamento == NULL || horario == NULL || estado == NULL)
     {
-        ComColor(255, 3, 0);
-        ComTXT(80, 240, 22, 0, "HACE CALOR, PON EL AIRE");
+        return;
     }
-    else if (T_act <= 20)
+
+    ComColor(229, 233, 239);
+    ComRect(12, y, 468, y + 40, true);
+    sprintf(texto, "%02u:%02u  %s", (unsigned int)horario->hora,
+            (unsigned int)horario->minuto, medicamento->nombre);
+    ComColor(0, 0, 0);
+    ComTXT(25, y + 7, 26, 0, texto);
+
+    if (estado->estado == CONFIRMADA)
     {
-        ComColor(0, 61, 194);
-        ComTXT(80, 240, 22, 0, "HACE FRIO, PON LA ESTUFA");
+        ComColor(20, 130, 55);
+        ComTXT(250, y + 22, 26, 0, "CONFIRMADA");
+        ComColor(155, 190, 130);
+        Boton(365, y + 3, 95, 34, 18, "TOMADA");
+    }
+    else if (puedeConfirmarToma(indiceMedicamento, 0))
+    {
+        ComColor(180, 100, 0);
+        ComTXT(250, y + 22, 26, 0,
+               (estado->estado == PENDIENTE) ? "PENDIENTE" : "PREPARADA");
+        ComColor(20, 150, 55);
+        *botonConfirmar = Boton(365, y + 3, 95, 34, 18, "CONFIRMAR");
+    }
+    else
+    {
+        ComColor(90, 90, 90);
+        ComTXT(250, y + 22, 26, 0,
+               (estado->estado == PENDIENTE) ? "PENDIENTE" : "PROGRAMADA");
+        ComColor(170, 170, 170);
+        Boton(365, y + 3, 95, 34, 18,
+              (estado->estado == PENDIENTE) ? "PLAZO FIN" : "ESPERAR");
+    }
+}
+
+void dibujarPantallaInicio(void)
+{
+    uint8_t horas;
+    uint8_t minutos;
+    uint8_t segundos;
+    uint8_t medicamentoAnterior;
+    uint8_t horarioAnterior;
+    uint8_t medicamentoSiguiente;
+    uint8_t horarioSiguiente;
+    uint8_t medicamentoPosterior;
+    uint8_t horarioPosterior;
+    char textoCabecera[24];
+    char textoTemperatura[20];
+    char *saludo;
+    const char *dia;
+
+    obtenerHora(&horas, &minutos, &segundos);
+    switch (obtenerDiaSemana())
+    {
+    case DIA_MARTES: dia = "MARTES"; break;
+    case DIA_MIERCOLES: dia = "MIERCOLES"; break;
+    case DIA_JUEVES: dia = "JUEVES"; break;
+    case DIA_VIERNES: dia = "VIERNES"; break;
+    case DIA_SABADO: dia = "SABADO"; break;
+    case DIA_DOMINGO: dia = "DOMINGO"; break;
+    default: dia = "LUNES"; break;
     }
 
+    saludo = (horas >= 6U && horas < 12U) ? "BUENOS DIAS" :
+             (horas < 21U) ? "BUENAS TARDES" : "BUENAS NOCHES";
+    sprintf(textoCabecera, "%s  %02u:%02u", dia,
+            (unsigned int)horas, (unsigned int)minutos);
 
-    //Botones
-    ComColor(224,184,65);
-    BotonCuidador = Boton(330, 233, 100, 35, 20, "MODO CUIDADOR");
+    Nueva_pantalla(248, 249, 251);
+    ComColor(44, 92, 142);
+    ComRect(0, 0, 480, 50, true);
+    ComColor(255, 255, 255);
+    ComTXT(18, 15, 29, 0, textoCabecera);
+    ComTXT(455, 15, 29, OPT_RIGHTX, saludo);
 
+    ComColor(255, 255, 255);
+    ComRect(8, 58, 472, 190, true);
+    ComColor(202, 212, 224);
+    ComRect(8, 58, 472, 190, false);
+    dibujarImagenPastillero(22, 72);
+
+    dibujarResumenToma("ANTERIOR", 78,
+                       obtenerTomaAnterior(&medicamentoAnterior, &horarioAnterior),
+                       medicamentoAnterior, horarioAnterior);
+    dibujarResumenToma("SIGUIENTE", 117,
+                       obtenerTomaFuturaPorOrden(0U, &medicamentoSiguiente,
+                                                  &horarioSiguiente),
+                       medicamentoSiguiente, horarioSiguiente);
+    dibujarResumenToma("DESPUES", 156,
+                       obtenerTomaFuturaPorOrden(1U, &medicamentoPosterior,
+                                                  &horarioPosterior),
+                       medicamentoPosterior, horarioPosterior);
+
+    ComColor(232, 238, 245);
+    ComRect(8, 198, 350, 266, true);
+    sprintf(textoTemperatura, "TEMPERATURA: %.1f C", T_act);
+    ComColor(0, 0, 0);
+    ComTXT(20, 208, 27, 0, textoTemperatura);
+    if (T_act >= 30.0f)
+    {
+        ComColor(190, 45, 35);
+        ComTXT(20, 238, 27, 0, "HACE CALOR: ABRA LA VENTANA");
+    }
+    else if (T_act <= 20.0f)
+    {
+        ComColor(35, 80, 170);
+        ComTXT(20, 238, 27, 0, "HACE FRIO: ABRIGUESE");
+    }
+    else
+    {
+        ComColor(25, 115, 65);
+        ComTXT(20, 238, 27, 0, "TEMPERATURA CONFORTABLE");
+    }
+
+    ComColor(224, 184, 65);
+    BotonCuidador = Boton(360, 205, 110, 55, 26, "CUIDADOR");
     Dibuja();
 }
 
-void dibujarPantallaCuidador(void){
-
+void dibujarPantallaCuidador(void)
+{
     BotonConfirmarA = 0;
     BotonConfirmarB = 0;
     BotonConfirmarC = 0;
-    const EstadoDiarioHorario *estadoA;
-    const EstadoDiarioHorario *estadoB;
-    const EstadoDiarioHorario *estadoC;
-    estadoA = obtenerEstadoDiarioHorario(0, 0);
-    estadoB = obtenerEstadoDiarioHorario(1, 0);
-    estadoC = obtenerEstadoDiarioHorario(2, 0);
-    Nueva_pantalla(255,255,255);
-    ComColor(148,170,255);
-    ComRect(0,0,480,50,true);
-    ComColor(255,255,255);
-    ComTXT(240, 20, 22, OPT_CENTERX, "MODO CUIDADOR");
-    ComColor(0,0,0);
-    ComTXT(40, 60, 22, 0, "MEDICACIONES DE HOY");
-    ComColor(222,215,215);
-    ComRect(15,90,465,125,true);
-    ComRect(15,135,465,170,true);
-    ComRect(15,180,465,215,true);
-    ComColor(0,0,0);
-    ComTXT(30, 95, 20, 0, "09:00 / MEDICACION A");
-    if (estadoA != NULL)
-    {
-        if (estadoA->estado == CONFIRMADA)
-        {
-            ComColor(30,201,30);
-            ComTXT(40, 115, 20, 0, "CONFIRMADA");
-            ComColor(212,212,76);
-            Boton(400, 90, 65, 35, 20, "TOMADA");
-        }
-        else if (estadoA->estado == PENDIENTE)
-        {
-            ComColor(204,124,0);
-            ComTXT(40, 115, 20, 0, "PENDIENTE");
-            ComColor(15,199,12);
-            BotonConfirmarA = Boton(400, 90, 65, 35, 20, "CONFIRMAR");
-            if (BotonConfirmarA != 0)
-            {
-                UARTprintf("BOTON A: X=%d, Y=%d\r\n", POSX, POSY);
-            }
-        }
-        else
-        {
-            ComColor(148,135,135);
-            ComTXT(40, 115, 20, 0, "PROGRAMADA");
-            Boton(400, 90, 65, 35, 20, "ESPERAR");
-        }
-    }
-    ComColor(0,0,0);
-    ComTXT(30, 140, 20, 0, "14:00 / MEDICACION B");
-    if (estadoB != NULL)
-        {
-            if (estadoB->estado == CONFIRMADA)
-            {
-                ComColor(30,201,30);
-                ComTXT(40, 160, 20, 0, "CONFIRMADA");
-                ComColor(212,212,76);
-                Boton(400, 135, 65, 35, 20, "TOMADA");
-            }
-            else if (estadoB->estado == PENDIENTE)
-            {
-                ComColor(204,124,0);
-                ComTXT(40, 160, 20, 0, "PENDIENTE");
-                ComColor(15,199,12);
-                BotonConfirmarB = Boton(400, 135, 65, 35, 20, "CONFIRMAR");
-            }
-            else
-            {
-                ComColor(148,135,135);
-                ComTXT(40, 160, 20, 0, "PROGRAMADA");
-                Boton(400, 135, 65, 35, 20, "ESPERAR");
-            }
-        }
-    ComColor(0,0,0);
-    ComTXT(30, 185, 20, 0, "21:00 / MEDICACION C");
-    if (estadoC != NULL)
-        {
-            if (estadoC->estado == CONFIRMADA)
-            {
-                ComColor(30,201,30);
-                ComTXT(40, 205, 20, 0, "CONFIRMADA");
-                ComColor(212,212,76);
-                Boton(400, 180, 65, 35, 20, "TOMADA");
 
-            }
-            else if (estadoC->estado == PENDIENTE)
-            {
-                ComColor(204,124,0);
-                ComTXT(40, 205, 20, 0, "PENDIENTE");
-                ComColor(15,199,12);
-                BotonConfirmarC = Boton(400, 180, 65, 35, 20, "CONFIRMAR");
-            }
-            else
-            {
-                ComColor(148,135,135);
-                ComTXT(40, 205, 20, 0, "PROGRAMADA");
-                Boton(400, 180, 65, 35, 20, "ESPERAR");
-            }
-        }
+    Nueva_pantalla(248, 249, 251);
+    ComColor(44, 92, 142);
+    ComRect(0, 0, 480, 44, true);
+    ComColor(255, 255, 255);
+    ComTXT(240, 12, 29, OPT_CENTERX, "MODO CUIDADOR");
+    ComColor(0, 0, 0);
+    ComTXT(18, 52, 26, 0, "MEDICAMENTOS DE HOY");
 
+    dibujarFilaCuidador(0, 78, &BotonConfirmarA);
+    dibujarFilaCuidador(1, 124, &BotonConfirmarB);
+    dibujarFilaCuidador(2, 170, &BotonConfirmarC);
 
-
-
-
-    //Boton para volver a la primera interfaz
-    ComColor(252,30,30);
-    BotonVolver = Boton(210, 230, 90, 35, 20, "VOLVER A INICIO");
+    ComColor(205, 75, 65);
+    BotonVolver = Boton(10, 218, 220, 44, 26, "VOLVER A INICIO");
+    /* La configuracion se implementara dentro de este modo en una fase posterior. */
+    ComColor(155, 155, 155);
+    (void)Boton(245, 218, 225, 44, 26, "CONFIGURAR PROX.");
     Dibuja();
 }
 

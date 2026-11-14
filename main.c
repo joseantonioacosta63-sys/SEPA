@@ -30,6 +30,8 @@ void IntTimer(void)
     ticksPendientes++;
 }
 
+/* Imprime por UART el historial que mantiene el modulo de registro. */
+static void mostrarHistorialUART(void);
 
 void confirmarYRegistrar(uint8_t indiceMedicamento, char letraMedicamento)
 {
@@ -71,7 +73,7 @@ void confirmarYRegistrar(uint8_t indiceMedicamento, char letraMedicamento)
 }
 
 
-void mostrarHistorialUART(void)
+static void mostrarHistorialUART(void)
 {
     uint8_t i;
     const RegistroToma *registro;
@@ -118,9 +120,9 @@ int main(void)
     bool Bme_OK = false;
     uint8_t Sensor_OK = 0;
 
-    int32_t g_s32ActualTemp = 0;
-    int32_t g_u32ActualPress = 0;
-    int32_t g_u32ActualHumity = 0;
+    s32 g_s32ActualTemp = 0;
+    u32 g_u32ActualPress = 0U;
+    u32 g_u32ActualHumity = 0U;
 
     const int32_t REG_CAL[6] = {CAL_DEFAULTS};
 
@@ -224,12 +226,16 @@ int main(void)
     // 9. Bucle principal
     while (1)
     {
-        bme280_read_pressure_temperature_humidity(
-            &g_u32ActualPress,
-            &g_s32ActualTemp,
-            &g_u32ActualHumity
-        );
-        T_act = (float)g_s32ActualTemp / 100.0f;
+        /* Solo se consulta I2C si la inicializacion del sensor fue correcta. */
+        if (Bme_OK)
+        {
+            bme280_read_pressure_temperature_humidity(
+                &g_u32ActualPress,
+                &g_s32ActualTemp,
+                &g_u32ActualHumity
+            );
+            T_act = (float)g_s32ActualTemp / 100.0f;
+        }
 
         // Recoger las interrupciones acumuladas
         IntMasterDisable();

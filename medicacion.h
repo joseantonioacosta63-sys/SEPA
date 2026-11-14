@@ -62,7 +62,11 @@ const HorarioConfig *obtenerHorarioConfigurado(uint8_t indiceMedicamento, uint8_
 const EstadoDiarioHorario *obtenerEstadoDiarioHorario(uint8_t indiceMedicamento, uint8_t indiceHorario);
 
 /* Opera sobre una toma concreta: medicamento y uno de sus horarios. */
+bool puedeConfirmarToma(uint8_t indiceMedicamento, uint8_t indiceHorario);
 bool confirmarToma(uint8_t indiceMedicamento, uint8_t indiceHorario);
+bool obtenerTomaAnterior(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
+bool obtenerTomaFuturaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
+                                uint8_t *indiceHorario);
 bool obtenerProximaToma(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
 
 bool crearMedicamento(uint8_t indiceMedicamento, const char *nombre);
