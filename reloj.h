@@ -2,6 +2,7 @@
 #define RELOJ_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* Cada dia ocupa un bit para poder compararlo con diasSemana de un horario. */
 #define DIA_LUNES     (1U << 0)
@@ -17,6 +18,11 @@
 void inicializarReloj(void);
 void actualizarReloj(void);
 void obtenerHora(uint8_t *h, uint8_t *m, uint8_t *s);
+void obtenerFecha(uint8_t *dia, uint8_t *mes, uint16_t *anio);
+bool fechaHoraEsValida(uint8_t dia, uint8_t mes, uint16_t anio,
+                       uint8_t hora, uint8_t minuto, uint8_t segundo);
+bool establecerFechaHora(uint8_t dia, uint8_t mes, uint16_t anio,
+                         uint8_t hora, uint8_t minuto, uint8_t segundo);
 uint8_t obtenerDiaSemana(void);
 uint32_t obtenerNumeroDia(void);
 

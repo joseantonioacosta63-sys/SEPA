@@ -12,7 +12,7 @@
 #include <stdbool.h>
 
 #define DIRECCION_REGISTRO 1024U
-#define MAX_REGISTROS 10
+#define MAX_REGISTROS 30
 
 // Identificador para reconocer nuestro historial
 #define FIRMA_REGISTRO 0x52454731UL

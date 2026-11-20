@@ -19,6 +19,8 @@
 #define DIA_SABADO (1U << 5)
 #define DIA_DOMINGO (1U << 6)
 #define DIA_TODOS (DIA_LUNES | DIA_MARTES | DIA_MIERCOLES | DIA_JUEVES | DIA_VIERNES | DIA_SABADO | DIA_DOMINGO)
+/* El bit 7 no representa un dia: conserva un horario, pero lo desactiva. */
+#define HORARIO_DESACTIVADO (1U << 7)
 
 
 typedef struct //estructura que define los horarios distintos programables con su hora, minuto y dias de la semana
@@ -58,7 +60,12 @@ bool guardarConfiguracionMedicacion(void);
 
 bool hayConfiguracionMedicacion(void);
 const MedicConfig *obtenerMedicamentoConfigurado(uint8_t indiceMedicamento);
+/* Permite al editor consultar tambien medicamentos desactivados. */
+const MedicConfig *obtenerMedicamentoParaEdicion(uint8_t indiceMedicamento);
 const HorarioConfig *obtenerHorarioConfigurado(uint8_t indiceMedicamento, uint8_t indiceHorario);
+/* El editor puede consultar horarios aunque el medicamento este desactivado. */
+const HorarioConfig *obtenerHorarioParaEdicion(uint8_t indiceMedicamento,
+                                                uint8_t indiceHorario);
 const EstadoDiarioHorario *obtenerEstadoDiarioHorario(uint8_t indiceMedicamento, uint8_t indiceHorario);
 
 /* Opera sobre una toma concreta: medicamento y uno de sus horarios. */
@@ -68,6 +75,9 @@ bool obtenerTomaAnterior(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
 bool obtenerTomaFuturaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
                                 uint8_t *indiceHorario);
 bool obtenerProximaToma(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
+uint8_t contarTomasDelDia(void);
+bool obtenerTomaDelDiaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
+                                uint8_t *indiceHorario);
 
 bool crearMedicamento(uint8_t indiceMedicamento, const char *nombre);
 bool editarNombreMedicamento(uint8_t indiceMedicamento, const char *nombre);
@@ -75,6 +85,8 @@ bool establecerMedicamentoActivo(uint8_t indiceMedicamento, bool activo);
 bool eliminarMedicamento(uint8_t indiceMedicamento);
 bool agregarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t hora, uint8_t minuto, uint8_t diasSemana);
 bool editarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario, uint8_t hora, uint8_t minuto, uint8_t diasSemana);
+bool establecerHorarioActivo(uint8_t indiceMedicamento, uint8_t indiceHorario,
+                             bool activo);
 bool eliminarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario);
 
 #endif

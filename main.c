@@ -17,7 +17,13 @@
 #define FREC 50
 
 int RELOJ;
-uint8_t pantallaActual = 0;
+#define PANTALLA_FECHA_HORA 0U
+#define PANTALLA_INICIO     1U
+#define PANTALLA_CUIDADOR   2U
+#define PANTALLA_CONFIGURACION 3U
+#define PANTALLA_EDICION_MEDICAMENTO 4U
+
+uint8_t pantallaActual = PANTALLA_FECHA_HORA;
 float T_act = 0.0f;
 
 // Numero de interrupciones pendientes de procesar
@@ -33,7 +39,7 @@ void IntTimer(void)
 /* Imprime por UART el historial que mantiene el modulo de registro. */
 static void mostrarHistorialUART(void);
 
-void confirmarYRegistrar(uint8_t indiceMedicamento, char letraMedicamento)
+void confirmarYRegistrar(uint8_t indiceMedicamento, uint8_t indiceHorario)
 {
     RegistroToma nuevaToma = {0};
 
@@ -41,17 +47,17 @@ void confirmarYRegistrar(uint8_t indiceMedicamento, char letraMedicamento)
     uint8_t hora, minuto, segundo;
 
     // Consultar el horario antes de confirmar
-    horario = obtenerHorarioConfigurado(indiceMedicamento, 0);
+    horario = obtenerHorarioConfigurado(indiceMedicamento, indiceHorario);
     if (horario == NULL)
     {
         return;
     }
 
     // Solo registrar si se ha confirmado correctamente
-    if (confirmarToma(indiceMedicamento, 0))
+    if (confirmarToma(indiceMedicamento, indiceHorario))
     {
-        // Medicamento
-        nuevaToma.medicamento = letraMedicamento;
+        /* Se conserva una letra para el formato actual del historial UART. */
+        nuevaToma.medicamento = (char)('A' + indiceMedicamento);
 
         // Hora prevista
         nuevaToma.horaProgramada = horario->hora;
@@ -123,6 +129,12 @@ int main(void)
     s32 g_s32ActualTemp = 0;
     u32 g_u32ActualPress = 0U;
     u32 g_u32ActualHumity = 0U;
+    const MedicConfig *medicamentoEdicion;
+    const HorarioConfig *horarioEdicion;
+    uint8_t indiceNuevoHorario;
+    uint8_t horaNueva;
+    uint8_t minutoNuevo;
+    bool horarioActivo;
 
     const int32_t REG_CAL[6] = {CAL_DEFAULTS};
 
@@ -155,6 +167,7 @@ int main(void)
 
     // 5. Inicializar nuestros modulos
     inicializarReloj();
+    inicializarPantallaFechaHora();
     inicializarMedicacion();
     gestionarMedicacion();
     inicializarRegistro();
@@ -179,8 +192,8 @@ int main(void)
     IntMasterEnable();
     TimerEnable(TIMER0_BASE, TIMER_A);
 
-    // 8. Pantalla principal
-    dibujarPantallaInicio();
+    // 8. La primera pantalla obliga a establecer fecha y hora.
+    dibujarPantallaFechaHora();
 
 
         //Configuracion del boosterpack
@@ -263,42 +276,188 @@ int main(void)
         {
             contadorPantalla = contadorPantalla % 5;
 
-            if (pantallaActual == 0)
+            if (pantallaActual == PANTALLA_FECHA_HORA)
+            {
+                dibujarPantallaFechaHora();
+            }
+            else if (pantallaActual == PANTALLA_INICIO)
             {
                 dibujarPantallaInicio();
             }
-            else if (pantallaActual == 1)
+            else if (pantallaActual == PANTALLA_CUIDADOR)
             {
                 dibujarPantallaCuidador();
             }
+            else if (pantallaActual == PANTALLA_CONFIGURACION)
+            {
+                dibujarPantallaConfiguracion();
+            }
+            else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO)
+            {
+                dibujarPantallaEdicionMedicamento();
+            }
         }
-        if (pantallaActual == 0 && BotonCuidador != 0)
+        if (pantallaActual == PANTALLA_FECHA_HORA && BotonAceptarFechaHora != 0)
         {
-            pantallaActual = 1;
+            pantallaActual = PANTALLA_INICIO;
+            BotonAceptarFechaHora = 0;
+            gestionarMedicacion();
+        }
+        else if (pantallaActual == PANTALLA_INICIO && BotonCuidador != 0)
+        {
+            pantallaActual = PANTALLA_CUIDADOR;
             BotonCuidador = 0;
             BotonVolver = 0;
         }
-        else if (pantallaActual == 1 && BotonVolver != 0)
+        else if (pantallaActual == PANTALLA_CUIDADOR && BotonVolver != 0)
         {
-            pantallaActual = 0;
+            pantallaActual = PANTALLA_INICIO;
             BotonCuidador = 0;
             BotonVolver = 0;
         }
-        if (pantallaActual == 1 && BotonConfirmarA != 0)
+        else if (pantallaActual == PANTALLA_CUIDADOR &&
+                 BotonConfiguracion != 0)
         {
-            UARTprintf("BOTON A DETECTADO\r\n");
-            confirmarYRegistrar(0, 'A');
-            BotonConfirmarA = 0;
+            pantallaActual = PANTALLA_CONFIGURACION;
+            BotonConfiguracion = 0;
+            BotonVolverConfiguracion = 0;
         }
-        if (pantallaActual == 1 && BotonConfirmarB != 0)
+        else if (pantallaActual == PANTALLA_CONFIGURACION &&
+                 BotonVolverConfiguracion != 0)
         {
-            confirmarYRegistrar(1, 'B');
-            BotonConfirmarB = 0;
+            pantallaActual = PANTALLA_CUIDADOR;
+            BotonVolverConfiguracion = 0;
         }
-        if (pantallaActual == 1 && BotonConfirmarC != 0)
+        else if (pantallaActual == PANTALLA_CONFIGURACION &&
+                 BotonEditarMedicamento != 0)
         {
-            confirmarYRegistrar(2, 'C');
-            BotonConfirmarC = 0;
+            /* El editor comienza siempre seleccionando el primer horario. */
+            pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
+            IndiceHorarioEdicion = 0U;
+            BotonEditarMedicamento = 0;
+            BotonVolverEdicionMedicamento = 0;
+        }
+        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
+                 BotonVolverEdicionMedicamento != 0)
+        {
+            pantallaActual = PANTALLA_CONFIGURACION;
+            BotonVolverEdicionMedicamento = 0;
+        }
+
+        /* El main coordina los cambios del editor y su guardado en EEPROM. */
+        if (pantallaActual == PANTALLA_CONFIGURACION &&
+            BotonCrearMedicamento != 0)
+        {
+            if (crearMedicamento(IndiceMedicamentoEdicion,
+                                 "MEDICAMENTO NUEVO"))
+            {
+                guardarConfiguracionMedicacion();
+                gestionarMedicacion();
+            }
+            BotonCrearMedicamento = 0;
+        }
+        else if (pantallaActual == PANTALLA_CONFIGURACION &&
+                 BotonCambiarActividadMedicamento != 0)
+        {
+            medicamentoEdicion =
+                obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+            if (medicamentoEdicion != NULL &&
+                establecerMedicamentoActivo(IndiceMedicamentoEdicion,
+                                            !medicamentoEdicion->activo))
+            {
+                guardarConfiguracionMedicacion();
+                gestionarMedicacion();
+            }
+            BotonCambiarActividadMedicamento = 0;
+        }
+        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
+                 BotonAgregarHorario != 0)
+        {
+            medicamentoEdicion =
+                obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+            indiceNuevoHorario = (medicamentoEdicion == NULL) ? 0U :
+                                 medicamentoEdicion->horariosUsados;
+            if (medicamentoEdicion != NULL &&
+                indiceNuevoHorario < MAX_HORARIOS_MEDICAMENTOS &&
+                agregarHorarioMedicamento(IndiceMedicamentoEdicion, 8U, 0U,
+                                          DIA_TODOS))
+            {
+                /* El nuevo horario queda seleccionado para editarlo inmediatamente. */
+                IndiceHorarioEdicion = indiceNuevoHorario;
+                guardarConfiguracionMedicacion();
+                gestionarMedicacion();
+            }
+            BotonAgregarHorario = 0;
+        }
+        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
+                 BotonCambiarActividadHorario != 0)
+        {
+            horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                                        IndiceHorarioEdicion);
+            horarioActivo = (horarioEdicion != NULL &&
+                              (horarioEdicion->diasSemana &
+                               HORARIO_DESACTIVADO) == 0U);
+            if (horarioEdicion != NULL &&
+                establecerHorarioActivo(IndiceMedicamentoEdicion,
+                                        IndiceHorarioEdicion,
+                                        !horarioActivo))
+            {
+                guardarConfiguracionMedicacion();
+                gestionarMedicacion();
+            }
+            BotonCambiarActividadHorario = 0;
+        }
+        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
+                 (BotonHoraMenos != 0 || BotonHoraMas != 0 ||
+                  BotonMinutoMenos != 0 || BotonMinutoMas != 0))
+        {
+            horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                                        IndiceHorarioEdicion);
+            if (horarioEdicion != NULL)
+            {
+                horaNueva = horarioEdicion->hora;
+                minutoNuevo = horarioEdicion->minuto;
+
+                /* Las horas y minutos son circulares para no salir de sus limites. */
+                if (BotonHoraMenos != 0)
+                {
+                    horaNueva = (horaNueva == 0U) ? 23U : (uint8_t)(horaNueva - 1U);
+                }
+                else if (BotonHoraMas != 0)
+                {
+                    horaNueva = (horaNueva == 23U) ? 0U : (uint8_t)(horaNueva + 1U);
+                }
+                else if (BotonMinutoMenos != 0)
+                {
+                    minutoNuevo = (minutoNuevo == 0U) ? 59U :
+                                   (uint8_t)(minutoNuevo - 1U);
+                }
+                else
+                {
+                    minutoNuevo = (minutoNuevo == 59U) ? 0U :
+                                   (uint8_t)(minutoNuevo + 1U);
+                }
+
+                if (editarHorarioMedicamento(IndiceMedicamentoEdicion,
+                                             IndiceHorarioEdicion, horaNueva,
+                                             minutoNuevo,
+                                             horarioEdicion->diasSemana))
+                {
+                    guardarConfiguracionMedicacion();
+                    gestionarMedicacion();
+                }
+            }
+            BotonHoraMenos = 0;
+            BotonHoraMas = 0;
+            BotonMinutoMenos = 0;
+            BotonMinutoMas = 0;
+        }
+
+        if (pantallaActual == PANTALLA_CUIDADOR && BotonConfirmarToma != 0)
+        {
+            confirmarYRegistrar(IndiceMedicamentoConfirmar,
+                                IndiceHorarioConfirmar);
+            BotonConfirmarToma = 0;
         }
 
     }
