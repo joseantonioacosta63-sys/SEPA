@@ -127,8 +127,8 @@ int main(void)
     uint8_t Sensor_OK = 0;
 
     s32 g_s32ActualTemp = 0;
-    u32 g_u32ActualPress = 0U;
-    u32 g_u32ActualHumity = 0U;
+    u32 g_u32ActualPress = 0;
+    u32 g_u32ActualHumity = 0;
     const MedicConfig *medicamentoEdicion;
     const HorarioConfig *horarioEdicion;
     uint8_t indiceNuevoHorario;
@@ -242,11 +242,14 @@ int main(void)
         /* Solo se consulta I2C si la inicializacion del sensor fue correcta. */
         if (Bme_OK)
         {
+            g_s32ActualTemp = 0;
+
             bme280_read_pressure_temperature_humidity(
                 &g_u32ActualPress,
                 &g_s32ActualTemp,
                 &g_u32ActualHumity
             );
+
             T_act = (float)g_s32ActualTemp / 100.0f;
         }
 
