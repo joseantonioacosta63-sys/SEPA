@@ -23,14 +23,16 @@
 #define HORARIO_DESACTIVADO (1U << 7)
 
 
-typedef struct //estructura que define los horarios distintos programables con su hora, minuto y dias de la semana
+/* Hora y máscara semanal de una administración configurada. */
+typedef struct
 {
     uint8_t hora;
     uint8_t minuto;
     uint8_t diasSemana;
 } HorarioConfig;
 
-typedef struct //estructura que engloba  HorarioConfig para varios horarios de una misma medicacion, su actividad y su nombre
+/* Configuración persistente de un medicamento, guardable en EEPROM. */
+typedef struct
 {
     char nombre[MAX_NOMBRES_MEDICAMENTOS]; //23 caracteres mas el nulo
     bool activo;
@@ -38,26 +40,32 @@ typedef struct //estructura que engloba  HorarioConfig para varios horarios de u
     uint8_t horariosUsados;
 } MedicConfig;
 
+/* Estado de un horario durante el día que se está ejecutando. */
 typedef enum
 {
     PROGRAMADA,
     PENDIENTE,
     CONFIRMADA,
+    EXPIRADA,
 } EstadoToma;
 
-typedef struct //estructura que define el estado de cada toma de cada medicacion
+/* Estado transitorio en RAM; no forma parte de la configuración permanente. */
+typedef struct
 {
     EstadoToma estado;
+    bool expiracionPendienteRegistro;
 } EstadoDiarioHorario;
 
-// Funciones publicas
+/* Carga la configuración y prepara los estados diarios en RAM. */
 void inicializarMedicacion(void);
+/* Actualiza estados por hora, día semanal y vencimiento de cada toma. */
 void gestionarMedicacion(void);
 
 /* Guarda o recupera la configuracion permanente de los medicamentos. */
 bool cargarConfiguracionMedicacion(void);
 bool guardarConfiguracionMedicacion(void);
 
+/* Verifica firma y versión antes de confiar en los datos de EEPROM. */
 bool hayConfiguracionMedicacion(void);
 const MedicConfig *obtenerMedicamentoConfigurado(uint8_t indiceMedicamento);
 /* Permite al editor consultar tambien medicamentos desactivados. */
@@ -75,18 +83,23 @@ bool obtenerTomaAnterior(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
 bool obtenerTomaFuturaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
                                 uint8_t *indiceHorario);
 bool obtenerProximaToma(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
+bool obtenerExpiracionPendiente(uint8_t *indiceMedicamento, uint8_t *indiceHorario);
 uint8_t contarTomasDelDia(void);
 bool obtenerTomaDelDiaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
                                 uint8_t *indiceHorario);
 
+/* Operaciones de edición en RAM; guardarConfiguracionMedicacion confirma cambios. */
 bool crearMedicamento(uint8_t indiceMedicamento, const char *nombre);
 bool editarNombreMedicamento(uint8_t indiceMedicamento, const char *nombre);
+bool restaurarMedicamento(uint8_t indiceMedicamento, const MedicConfig *respaldo);
 bool establecerMedicamentoActivo(uint8_t indiceMedicamento, bool activo);
 bool eliminarMedicamento(uint8_t indiceMedicamento);
 bool agregarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t hora, uint8_t minuto, uint8_t diasSemana);
 bool editarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario, uint8_t hora, uint8_t minuto, uint8_t diasSemana);
 bool establecerHorarioActivo(uint8_t indiceMedicamento, uint8_t indiceHorario,
                              bool activo);
+bool alternarDiaHorario(uint8_t indiceMedicamento, uint8_t indiceHorario,
+                        uint8_t dia);
 bool eliminarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario);
 
 #endif

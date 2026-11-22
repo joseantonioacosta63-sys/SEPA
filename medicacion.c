@@ -33,7 +33,9 @@ static AlmacenamientoConfiguracion almacenamientoConfiguracion;
 #define configuracion (almacenamientoConfiguracion.datos)
 
 /* El estado diario no forma parte de la configuracion persistente. */
+/* Estados temporales por horario: se recalculan en RAM y nunca se escriben en EEPROM. */
 static EstadoDiarioHorario estadosDiarios[MAX_MEDICAMENTOS][MAX_HORARIOS_MEDICAMENTOS];
+static uint32_t ultimoDiaGestionado;
 
 /* Marca la copia RAM como compatible con el formato actual antes de guardarla. */
 static void actualizarCabeceraConfiguracion(void)
@@ -106,6 +108,7 @@ static void reiniciarEstadosMedicamento(uint8_t indiceMedicamento)
     for (horario = 0; horario < MAX_HORARIOS_MEDICAMENTOS; horario++)
     {
         estadosDiarios[indiceMedicamento][horario].estado = PROGRAMADA;
+        estadosDiarios[indiceMedicamento][horario].expiracionPendienteRegistro = false;
     }
 }
 
@@ -333,6 +336,20 @@ bool editarNombreMedicamento(uint8_t indiceMedicamento, const char *nombre)
     return true;
 }
 
+/* Restaura la copia tomada al entrar al editor para descartar cambios no guardados. */
+bool restaurarMedicamento(uint8_t indiceMedicamento, const MedicConfig *respaldo)
+{
+    if (indiceMedicamento >= MAX_MEDICAMENTOS || respaldo == NULL)
+    {
+        return false;
+    }
+
+    configuracion.medicamentos[indiceMedicamento] = *respaldo;
+    reiniciarEstadosMedicamento(indiceMedicamento);
+    actualizarCabeceraConfiguracion();
+    return true;
+}
+
 /* Activa o desactiva un medicamento sin borrar su configuracion ni horarios. */
 bool establecerMedicamentoActivo(uint8_t indiceMedicamento, bool activo)
 {
@@ -387,6 +404,7 @@ bool agregarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t hora, uint8_t 
     medicamento->horarios[indiceHorario] = (HorarioConfig){hora, minuto, diasSemana};
     medicamento->horariosUsados++;
     estadosDiarios[indiceMedicamento][indiceHorario].estado = PROGRAMADA;
+    estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = false;
     actualizarCabeceraConfiguracion();
     return true;
 }
@@ -417,6 +435,7 @@ bool editarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario, 
                         (medicamento->horarios[indiceHorario].diasSemana &
                          HORARIO_DESACTIVADO))};
     estadosDiarios[indiceMedicamento][indiceHorario].estado = PROGRAMADA;
+    estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = false;
     actualizarCabeceraConfiguracion();
     return true;
 }
@@ -449,6 +468,51 @@ bool establecerHorarioActivo(uint8_t indiceMedicamento, uint8_t indiceHorario,
         medicamento->horarios[indiceHorario].diasSemana |= HORARIO_DESACTIVADO;
     }
     estadosDiarios[indiceMedicamento][indiceHorario].estado = PROGRAMADA;
+    estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = false;
+    actualizarCabeceraConfiguracion();
+    return true;
+}
+
+bool alternarDiaHorario(uint8_t indiceMedicamento, uint8_t indiceHorario,
+                        uint8_t dia)
+{
+    MedicConfig *medicamento;
+    uint8_t diasActuales;
+
+    if (indiceMedicamento >= MAX_MEDICAMENTOS ||
+        !medicamentoExiste(indiceMedicamento) ||
+        (dia & DIA_TODOS) == 0U ||
+        (dia & (uint8_t)(~DIA_TODOS)) != 0U)
+    {
+        return false;
+    }
+
+    medicamento = &configuracion.medicamentos[indiceMedicamento];
+    if (indiceHorario >= medicamento->horariosUsados)
+    {
+        return false;
+    }
+
+    diasActuales = medicamento->horarios[indiceHorario].diasSemana & DIA_TODOS;
+    if ((diasActuales & dia) != 0U)
+    {
+        if (diasActuales == dia)
+        {
+            return false;
+        }
+        diasActuales &= (uint8_t)(~dia);
+    }
+    else
+    {
+        diasActuales |= dia;
+    }
+
+    medicamento->horarios[indiceHorario].diasSemana =
+        (uint8_t)(diasActuales |
+        (medicamento->horarios[indiceHorario].diasSemana &
+         HORARIO_DESACTIVADO));
+    estadosDiarios[indiceMedicamento][indiceHorario].estado = PROGRAMADA;
+    estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = false;
     actualizarCabeceraConfiguracion();
     return true;
 }
@@ -481,10 +545,12 @@ bool eliminarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario
     medicamento->horariosUsados--;
     medicamento->horarios[medicamento->horariosUsados] = (HorarioConfig){0};
     estadosDiarios[indiceMedicamento][medicamento->horariosUsados].estado = PROGRAMADA;
+    estadosDiarios[indiceMedicamento][medicamento->horariosUsados].expiracionPendienteRegistro = false;
     actualizarCabeceraConfiguracion();
     return true;
 }
 
+/* El cambio de día reinicia la lógica de tomas sin generar registros históricos. */
 static void reiniciarEstadosDiarios(void)
 {
     uint8_t medicamento;
@@ -495,27 +561,30 @@ static void reiniciarEstadosDiarios(void)
         for (horario = 0; horario < MAX_HORARIOS_MEDICAMENTOS; horario++)
         {
             estadosDiarios[medicamento][horario].estado = PROGRAMADA;
+            estadosDiarios[medicamento][horario].expiracionPendienteRegistro = false;
         }
     }
 }
 
+/* Carga EEPROM o crea una configuración de demostración la primera vez. */
 void inicializarMedicacion(void)
 {
     reiniciarEstadosDiarios();
+    ultimoDiaGestionado = obtenerNumeroDia();
 
     if (!cargarConfiguracionMedicacion())
     {
-        // Crear los tres medicamentos por defecto
+        /* Crear los medicamentos de demostración cuando aún no existe configuración. */
         crearMedicamento(0, "Medicacion A");
         crearMedicamento(1, "Medicacion B");
         crearMedicamento(2, "Medicacion C");
         crearMedicamento(3, "Medicacion D");
-        // Asignar un horario diario a cada medicamento
+        /* Asignar un horario diario de prueba a cada medicamento. */
         agregarHorarioMedicamento(0, 9, 0, DIA_TODOS);
         agregarHorarioMedicamento(1, 14, 0, DIA_TODOS);
         agregarHorarioMedicamento(2, 21, 0, DIA_TODOS);
         agregarHorarioMedicamento(3, 0, 0, DIA_TODOS);
-        // Intentar guardar la configuracion en EEPROM
+        /* Intentar guardar la configuración inicial para los siguientes arranques. */
         guardarConfiguracionMedicacion();
     }
     else if (crearMedicamento(3U, "Medicacion D"))
@@ -526,6 +595,7 @@ void inicializarMedicacion(void)
     }
 }
 
+/* Actualiza la máquina de estados de cada toma a partir del reloj y día semanal. */
 void gestionarMedicacion(void)
 {
     uint8_t horaActual;
@@ -536,12 +606,21 @@ void gestionarMedicacion(void)
     uint8_t indiceHorario;
     uint32_t segundosActuales;
     uint32_t segundosProgramados;
+    uint32_t numeroDiaActual;
     const MedicConfig *medicamento;
     const HorarioConfig *horario;
 
     if (!hayConfiguracionMedicacion())
     {
         return;
+    }
+
+    numeroDiaActual = obtenerNumeroDia();
+    /* Cada número de día nuevo empieza con tomas PROGRAMADAS. */
+    if (numeroDiaActual != ultimoDiaGestionado)
+    {
+        reiniciarEstadosDiarios();
+        ultimoDiaGestionado = numeroDiaActual;
     }
 
     obtenerHora(&horaActual, &minutoActual, &segundoActual);
@@ -565,7 +644,8 @@ void gestionarMedicacion(void)
             horario = &medicamento->horarios[indiceHorario];
 
             if (!horarioCorrespondeAlDia(horario, diaSemanaActual) ||
-                estadosDiarios[indiceMedicamento][indiceHorario].estado == CONFIRMADA)
+                estadosDiarios[indiceMedicamento][indiceHorario].estado == CONFIRMADA ||
+                estadosDiarios[indiceMedicamento][indiceHorario].estado == EXPIRADA)
             {
                 continue;
             }
@@ -573,7 +653,12 @@ void gestionarMedicacion(void)
             segundosProgramados = (uint32_t)horario->hora * 3600U +
                                   (uint32_t)horario->minuto * 60U;
 
-            if (segundosActuales >= segundosProgramados)
+            if (segundosActuales > (segundosProgramados + 7200U))
+            {
+                estadosDiarios[indiceMedicamento][indiceHorario].estado = EXPIRADA;
+                estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = true;
+            }
+            else if (segundosActuales >= segundosProgramados)
             {
                 estadosDiarios[indiceMedicamento][indiceHorario].estado = PENDIENTE;
             }
@@ -584,6 +669,35 @@ void gestionarMedicacion(void)
 
         }
     }
+}
+
+/* Entrega una expiración pendiente una sola vez para que main.c la registre por UART. */
+bool obtenerExpiracionPendiente(uint8_t *indiceMedicamento, uint8_t *indiceHorario)
+{
+    uint8_t medicamento;
+    uint8_t horario;
+
+    if (indiceMedicamento == NULL || indiceHorario == NULL)
+    {
+        return false;
+    }
+
+    for (medicamento = 0U; medicamento < MAX_MEDICAMENTOS; medicamento++)
+    {
+        for (horario = 0U; horario < MAX_HORARIOS_MEDICAMENTOS; horario++)
+        {
+            if (estadosDiarios[medicamento][horario].estado == EXPIRADA &&
+                estadosDiarios[medicamento][horario].expiracionPendienteRegistro)
+            {
+                estadosDiarios[medicamento][horario].expiracionPendienteRegistro = false;
+                *indiceMedicamento = medicamento;
+                *indiceHorario = horario;
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /* Indica si la toma puede confirmarse entre 10 minutos antes y 2 horas despues. */
@@ -727,9 +841,7 @@ bool obtenerTomaAnterior(uint8_t *indiceMedicamentoResultado,
 }
 
 /* Obtiene la toma futura indicada: orden 0 es la mas cercana y orden 1 la siguiente. */
-bool obtenerTomaFuturaPorOrden(uint8_t orden,
-                                uint8_t *indiceMedicamentoResultado,
-                                uint8_t *indiceHorarioResultado)
+bool obtenerTomaFuturaPorOrden(uint8_t orden, uint8_t *indiceMedicamentoResultado, uint8_t *indiceHorarioResultado)
 {
     uint8_t horaActual;
     uint8_t minutoActual;
@@ -759,16 +871,14 @@ bool obtenerTomaFuturaPorOrden(uint8_t orden,
 
     obtenerHora(&horaActual, &minutoActual, &segundoActual);
     diaSemanaActual = obtenerDiaSemana();
-    segundosActuales = (uint32_t)horaActual * 3600U +
-                        (uint32_t)minutoActual * 60U + segundoActual;
+    segundosActuales = (uint32_t)horaActual * 3600U + (uint32_t)minutoActual * 60U + segundoActual;
 
     for (paso = 0U; paso <= orden; paso++)
     {
         encontrada = false;
         mejorHora = 86401U;
 
-        for (indiceMedicamento = 0; indiceMedicamento < MAX_MEDICAMENTOS;
-             indiceMedicamento++)
+        for (indiceMedicamento = 0; indiceMedicamento < MAX_MEDICAMENTOS; indiceMedicamento++)
         {
             medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
             if (medicamento == NULL)
@@ -776,9 +886,7 @@ bool obtenerTomaFuturaPorOrden(uint8_t orden,
                 continue;
             }
 
-            for (indiceHorario = 0;
-                 indiceHorario < medicamento->horariosUsados;
-                 indiceHorario++)
+            for (indiceHorario = 0; indiceHorario < medicamento->horariosUsados; indiceHorario++)
             {
                 horario = &medicamento->horarios[indiceHorario];
                 if (!horarioCorrespondeAlDia(horario, diaSemanaActual) ||
@@ -790,12 +898,10 @@ bool obtenerTomaFuturaPorOrden(uint8_t orden,
                 segundosProgramados = (uint32_t)horario->hora * 3600U +
                                       (uint32_t)horario->minuto * 60U;
 
-                if (segundosProgramados <= segundosActuales ||
-                    segundosProgramados < limiteAnterior ||
+                if (segundosProgramados <= segundosActuales || segundosProgramados < limiteAnterior ||
                     (segundosProgramados == limiteAnterior &&
                      (indiceMedicamento < medicamentoAnterior ||
-                      (indiceMedicamento == medicamentoAnterior &&
-                       indiceHorario <= horarioAnterior))))
+                      (indiceMedicamento == medicamentoAnterior && indiceHorario <= horarioAnterior))))
                 {
                     continue;
                 }
@@ -826,11 +932,9 @@ bool obtenerTomaFuturaPorOrden(uint8_t orden,
 }
 
 /* Mantiene la API anterior: la proxima toma es la futura de orden cero. */
-bool obtenerProximaToma(uint8_t *indiceMedicamentoResultado,
-                        uint8_t *indiceHorarioResultado)
+bool obtenerProximaToma(uint8_t *indiceMedicamentoResultado, uint8_t *indiceHorarioResultado)
 {
-    return obtenerTomaFuturaPorOrden(0U, indiceMedicamentoResultado,
-                                     indiceHorarioResultado);
+    return obtenerTomaFuturaPorOrden(0U, indiceMedicamentoResultado, indiceHorarioResultado);
 }
 
 /* Cuenta los horarios de medicamentos activos que corresponden al dia actual. */
@@ -844,8 +948,7 @@ uint8_t contarTomasDelDia(void)
 
     diaSemanaActual = obtenerDiaSemana();
 
-    for (indiceMedicamento = 0U; indiceMedicamento < MAX_MEDICAMENTOS;
-         indiceMedicamento++)
+    for (indiceMedicamento = 0U; indiceMedicamento < MAX_MEDICAMENTOS; indiceMedicamento++)
     {
         medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
         if (medicamento == NULL)
@@ -853,12 +956,9 @@ uint8_t contarTomasDelDia(void)
             continue;
         }
 
-        for (indiceHorario = 0U;
-             indiceHorario < medicamento->horariosUsados;
-             indiceHorario++)
+        for (indiceHorario = 0U; indiceHorario < medicamento->horariosUsados; indiceHorario++)
         {
-            if (horarioCorrespondeAlDia(&medicamento->horarios[indiceHorario],
-                                        diaSemanaActual))
+            if (horarioCorrespondeAlDia(&medicamento->horarios[indiceHorario], diaSemanaActual))
             {
                 cantidad++;
             }
@@ -869,8 +969,7 @@ uint8_t contarTomasDelDia(void)
 }
 
 /* Devuelve la toma del dia indicada, ordenada por hora y luego por sus indices. */
-bool obtenerTomaDelDiaPorOrden(uint8_t orden,
-                                uint8_t *indiceMedicamentoResultado,
+bool obtenerTomaDelDiaPorOrden(uint8_t orden, uint8_t *indiceMedicamentoResultado,
                                 uint8_t *indiceHorarioResultado)
 {
     uint8_t indiceMedicamento;
@@ -888,8 +987,7 @@ bool obtenerTomaDelDiaPorOrden(uint8_t orden,
     const MedicConfig *medicamento;
     const HorarioConfig *horario;
 
-    if (indiceMedicamentoResultado == NULL ||
-        indiceHorarioResultado == NULL ||
+    if (indiceMedicamentoResultado == NULL || indiceHorarioResultado == NULL ||
         orden >= contarTomasDelDia())
     {
         return false;
@@ -902,8 +1000,7 @@ bool obtenerTomaDelDiaPorOrden(uint8_t orden,
         encontrada = false;
         mejorHora = 86401U;
 
-        for (indiceMedicamento = 0U; indiceMedicamento < MAX_MEDICAMENTOS;
-             indiceMedicamento++)
+        for (indiceMedicamento = 0U; indiceMedicamento < MAX_MEDICAMENTOS; indiceMedicamento++)
         {
             medicamento = obtenerMedicamentoConfigurado(indiceMedicamento);
             if (medicamento == NULL)
@@ -911,9 +1008,7 @@ bool obtenerTomaDelDiaPorOrden(uint8_t orden,
                 continue;
             }
 
-            for (indiceHorario = 0U;
-                 indiceHorario < medicamento->horariosUsados;
-                 indiceHorario++)
+            for (indiceHorario = 0U; indiceHorario < medicamento->horariosUsados; indiceHorario++)
             {
                 horario = &medicamento->horarios[indiceHorario];
                 if (!horarioCorrespondeAlDia(horario, diaSemanaActual))
@@ -921,14 +1016,11 @@ bool obtenerTomaDelDiaPorOrden(uint8_t orden,
                     continue;
                 }
 
-                segundosProgramados = (uint32_t)horario->hora * 3600U +
-                                      (uint32_t)horario->minuto * 60U;
+                segundosProgramados = (uint32_t)horario->hora * 3600U + (uint32_t)horario->minuto * 60U;
 
-                if (segundosProgramados < limiteAnterior ||
-                    (paso > 0U && segundosProgramados == limiteAnterior &&
+                if (segundosProgramados < limiteAnterior || (paso > 0U && segundosProgramados == limiteAnterior &&
                      (indiceMedicamento < medicamentoAnterior ||
-                      (indiceMedicamento == medicamentoAnterior &&
-                       indiceHorario <= horarioAnterior))))
+                      (indiceMedicamento == medicamentoAnterior && indiceHorario <= horarioAnterior))))
                 {
                     continue;
                 }
