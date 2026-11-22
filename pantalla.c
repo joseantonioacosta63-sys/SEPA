@@ -17,25 +17,36 @@
 #include "medicacion.h"
 
 extern float T_act;
+extern bool SensorDisponible;
 
 #define IMAGEN_DIRECCION 0
 #define IMAGEN_RGB565    7
 #define BLOQUE_JPG       256
 #define ESPERA_MAX       2000000UL
 #define FILAS_CUIDADOR_VISIBLES 3U
-#define NOMBRE_VISIBLE_MAXIMO   12U
+#define NOMBRE_VISIBLE_MAXIMO   (MAX_NOMBRES_MEDICAMENTOS - 1U)
 
+/* Estado de recursos y de interacción táctil que solo pertenece a la interfaz. */
 static bool imagenCargada = false;
 int BotonCuidador=0;
 int BotonVolver=0;
 int BotonConfiguracion=0;
 int BotonVolverConfiguracion=0;
 int BotonCrearMedicamento=0;
+int BotonEditarNombreMedicamento=0;
+int BotonAceptarNombreMedicamento=0;
+int BotonCancelarNombreMedicamento=0;
 int BotonCambiarActividadMedicamento=0;
 int BotonEditarMedicamento=0;
+int BotonEliminarMedicamento=0;
 int BotonVolverEdicionMedicamento=0;
 int BotonAgregarHorario=0;
 int BotonCambiarActividadHorario=0;
+int BotonEditarDiasHorario=0;
+int BotonVolverDiasHorario=0;
+int BotonAlternarDiaHorario=0;
+int BotonEliminarHorario=0;
+int BotonGuardarMedicamento=0;
 int BotonHoraMenos=0;
 int BotonHoraMas=0;
 int BotonMinutoMenos=0;
@@ -46,8 +57,8 @@ uint8_t IndiceMedicamentoConfirmar=0U;
 uint8_t IndiceHorarioConfirmar=0U;
 uint8_t IndiceMedicamentoEdicion=0U;
 uint8_t IndiceHorarioEdicion=0U;
+uint8_t DiaHorarioEdicion=0U;
 
-/* Valores editables antes de iniciar el reloj real del programa. */
 static uint8_t diaEdicion;
 static uint8_t mesEdicion;
 static uint16_t anioEdicion;
@@ -56,7 +67,14 @@ static uint8_t minutoEdicion;
 static bool estadoBotonFechaHora[11];
 static uint8_t primeraTomaVisible = 0U;
 static bool estadoBotonLista[5];
-static bool estadoBotonEdicion[12];
+static bool estadoBotonEdicion[22];
+static bool estadoBotonNavegacion[13];
+static bool estadoBotonTeclado[17];
+static bool confirmarBorradoMedicamento = false;
+static bool confirmarBorradoHorario = false;
+static char nombreEdicionMedicamento[MAX_NOMBRES_MEDICAMENTOS];
+static uint8_t longitudNombreEdicion = 0U;
+static uint8_t paginaTecladoNombre = 0U;
 
 /* Convierte una pulsacion mantenida en un unico evento para cada boton. */
 static int botonFechaHora(uint8_t indice, int x, int y, int ancho, int alto,
@@ -91,7 +109,63 @@ static int botonEdicion(uint8_t indice, int x, int y, int ancho, int alto,
     return evento;
 }
 
-/* Corrige el dia al cambiar de mes o anio, por ejemplo de 31/01 a febrero. */
+/* Para navegación se genera el evento al soltar, evitando saltos entre pantallas al mantener pulsado. */
+static int botonAlSoltar(uint8_t indice, int x, int y, int ancho, int alto,
+                         int fuente, char *texto)
+{
+    int pulsado = Boton(x, y, ancho, alto, fuente, texto);
+    int evento = (!pulsado && estadoBotonNavegacion[indice]);
+
+    estadoBotonNavegacion[indice] = (pulsado != 0);
+    return evento;
+}
+
+static int botonTeclado(uint8_t indice, int x, int y, int ancho, int alto,
+                        int fuente, char *texto)
+{
+    int pulsado = Boton(x, y, ancho, alto, fuente, texto);
+    int evento = (pulsado != 0 && !estadoBotonTeclado[indice]);
+
+    estadoBotonTeclado[indice] = (pulsado != 0);
+    return evento;
+}
+
+/* Añade un carácter al buffer del teclado sin superar el límite del nombre configurado. */
+static void anadirCaracterNombre(char caracter)
+{
+    if (longitudNombreEdicion < (MAX_NOMBRES_MEDICAMENTOS - 1U))
+    {
+        nombreEdicionMedicamento[longitudNombreEdicion] = caracter;
+        longitudNombreEdicion++;
+        nombreEdicionMedicamento[longitudNombreEdicion] = '\0';
+    }
+}
+
+static void dibujarFilaTeclasNombre(const char *letras, uint8_t cantidad,
+                                    int y, uint8_t indiceInicial)
+{
+    uint8_t indice;
+    int ancho = 58;
+    int separacion = 9;
+    int x = (480 - ((int)cantidad * ancho +
+                    ((int)cantidad - 1) * separacion)) / 2;
+    char texto[2];
+
+    for (indice = 0U; indice < cantidad; indice++)
+    {
+        texto[0] = letras[indice];
+        texto[1] = '\0';
+        ComColor(44, 92, 142);
+        if (botonTeclado((uint8_t)(indiceInicial + indice), x, y, ancho, 34,
+                          26, texto))
+        {
+            anadirCaracterNombre(letras[indice]);
+        }
+        x += ancho + separacion;
+    }
+}
+
+/* Corrige el día seleccionado al cambiar mes o año para mantener una fecha válida. */
 static void ajustarDiaEdicion(void)
 {
     while (!fechaHoraEsValida(diaEdicion, mesEdicion, anioEdicion,
@@ -212,7 +286,7 @@ void dibujarPantallaFechaHora(void)
     }
 
     ComColor(35, 145, 75);
-    if (botonFechaHora(10U, 145, 220, 185, 35, 28, "ACEPTAR"))
+    if (botonAlSoltar(11U, 145, 220, 185, 35, 28, "ACEPTAR"))
     {
         if (establecerFechaHora(diaEdicion, mesEdicion, anioEdicion,
                                 horaEdicion, minutoEdicion, 0U))
@@ -224,7 +298,6 @@ void dibujarPantallaFechaHora(void)
 }
 
 
-// Funcion auxiliar para controlar el FIFO
 static bool esperarEspacio(uint16_t bytes)
 {
     uint32_t lectura;
@@ -274,7 +347,6 @@ static bool esperarFinImagen(void)
     return false;
 }
 
-// Cargar la imagen en el FT800
 void cargarImagenPastillero(void)
 {
     uint32_t i = 0;
@@ -342,7 +414,6 @@ void cargarImagenPastillero(void)
         imagenCargada = true;
 }
 
-// Dibujar la imagen en pantalla
 void dibujarImagenPastillero(int x, int y)
 {
     if (!imagenCargada)
@@ -487,14 +558,17 @@ static void dibujarFilaCuidador(uint8_t indiceMedicamento,
     else
     {
         ComColor(90, 90, 90);
-        estadoTexto = (estado->estado == PENDIENTE) ? "PENDIENTE" : "PROGRAMADA";
+        estadoTexto = (estado->estado == EXPIRADA) ? "EXPIRADA" :
+                      (estado->estado == PENDIENTE) ? "PENDIENTE" : "PROGRAMADA";
         ComTXT(92, y + 22, 26, 0, estadoTexto);
         ComColor(170, 170, 170);
         ComButton(290, y + 3, 105, 34, 26, 0,
+                  (estado->estado == EXPIRADA) ? "VENCIDA" :
                   (estado->estado == PENDIENTE) ? "PLAZO FIN" : "ESPERAR");
     }
 }
 
+/* Pantalla principal: resume fecha, tomas cercanas, temperatura y acceso al cuidador. */
 void dibujarPantallaInicio(void)
 {
     uint8_t horas;
@@ -549,30 +623,39 @@ void dibujarPantallaInicio(void)
 
     ComColor(232, 238, 245);
     ComRect(8, 198, 350, 266, true);
-    sprintf(textoTemperatura, "TEMPERATURA: %.1f C", T_act);
-    ComColor(0, 0, 0);
-    ComTXT(20, 208, 27, 0, textoTemperatura);
-    if (T_act >= 30.0f)
+    if (!SensorDisponible)
     {
-        ComColor(190, 45, 35);
-        ComTXT(20, 238, 27, 0, "HACE CALOR: ABRA LA VENTANA");
-    }
-    else if (T_act <= 20.0f)
-    {
-        ComColor(35, 80, 170);
-        ComTXT(20, 238, 27, 0, "HACE FRIO: ABRIGUESE");
+        ComColor(90, 90, 90);
+        ComTXT(20, 220, 27, 0, "SENSOR NO DISPONIBLE");
     }
     else
     {
-        ComColor(25, 115, 65);
-        ComTXT(20, 238, 27, 0, "TEMPERATURA CONFORTABLE");
+        sprintf(textoTemperatura, "TEMPERATURA: %.1f C", T_act);
+        ComColor(0, 0, 0);
+        ComTXT(20, 208, 27, 0, textoTemperatura);
+        if (T_act >= 30.0f)
+        {
+            ComColor(190, 45, 35);
+            ComTXT(20, 238, 27, 0, "HACE CALOR: ABRA LA VENTANA");
+        }
+        else if (T_act <= 20.0f)
+        {
+            ComColor(35, 80, 170);
+            ComTXT(20, 238, 27, 0, "HACE FRIO: ABRIGUESE");
+        }
+        else
+        {
+            ComColor(25, 115, 65);
+            ComTXT(20, 238, 27, 0, "TEMPERATURA CONFORTABLE");
+        }
     }
 
     ComColor(224, 184, 65);
-    BotonCuidador = Boton(360, 205, 110, 55, 26, "CUIDADOR");
+    BotonCuidador = botonAlSoltar(0U, 360, 205, 110, 55, 26, "CUIDADOR");
     Dibuja();
 }
 
+/* Lista desplazable de las tomas del día con su estado y botón de confirmación. */
 void dibujarPantallaCuidador(void)
 {
     uint8_t totalTomas;
@@ -655,17 +738,126 @@ void dibujarPantallaCuidador(void)
     }
 
     ComColor(205, 75, 65);
-    BotonVolver = Boton(10, 218, 215, 44, 26, "VOLVER");
+    BotonVolver = botonAlSoltar(2U, 10, 218, 215, 44, 26, "VOLVER");
     ComColor(44, 92, 142);
-    BotonConfiguracion = Boton(240, 218, 230, 44, 26, "CONFIGURAR");
+    BotonConfiguracion = botonAlSoltar(1U, 240, 218, 230, 44, 26,
+                                        "CONFIGURAR");
+    Dibuja();
+}
+
+/* Inicializa el buffer del teclado con el nombre actual o vacío para una nueva creación. */
+void iniciarEdicionNombreMedicamento(const char *nombreInicial)
+{
+    uint8_t indice;
+
+    longitudNombreEdicion = 0U;
+    nombreEdicionMedicamento[0] = '\0';
+    paginaTecladoNombre = 0U;
+    BotonAceptarNombreMedicamento = 0;
+    BotonCancelarNombreMedicamento = 0;
+
+    for (indice = 0U; indice < 17U; indice++)
+    {
+        estadoBotonTeclado[indice] = false;
+    }
+
+    if (nombreInicial != NULL)
+    {
+        while (nombreInicial[longitudNombreEdicion] != '\0' &&
+               longitudNombreEdicion < (MAX_NOMBRES_MEDICAMENTOS - 1U))
+        {
+            nombreEdicionMedicamento[longitudNombreEdicion] =
+                nombreInicial[longitudNombreEdicion];
+            longitudNombreEdicion++;
+        }
+        nombreEdicionMedicamento[longitudNombreEdicion] = '\0';
+    }
+}
+
+/* Devuelve el texto temporal del teclado; main.c decide si aplicarlo o descartarlo. */
+const char *obtenerNombreEdicionMedicamento(void)
+{
+    return nombreEdicionMedicamento;
+}
+
+/* Teclado en pantalla de dos páginas para editar nombres sin necesidad de UART. */
+void dibujarPantallaNombreMedicamento(void)
+{
+    const char *primeraFila;
+    const char *segundaFila;
+    uint8_t cantidadSegundaFila;
+
+    BotonAceptarNombreMedicamento = 0;
+    BotonCancelarNombreMedicamento = 0;
+
+    Nueva_pantalla(248, 249, 251);
+    ComColor(44, 92, 142);
+    ComRect(0, 0, 480, 36, true);
+    ComColor(255, 255, 255);
+    ComTXT(240, 7, 28, OPT_CENTERX, "NOMBRE MEDICAMENTO");
+
+    ComColor(0, 0, 0);
+    ComTXT(10, 45, 26, 0, "NOMBRE:");
+    ComTXT(145, 45, 26, 0, nombreEdicionMedicamento);
+
+    if (paginaTecladoNombre == 0U)
+    {
+        primeraFila = "ABCDEFG";
+        segundaFila = "HIJKLMN";
+        cantidadSegundaFila = 7U;
+    }
+    else
+    {
+        primeraFila = "OPQRSTU";
+        segundaFila = "VWXYZ";
+        cantidadSegundaFila = 5U;
+    }
+
+    dibujarFilaTeclasNombre(primeraFila, 7U, 85, 0U);
+    dibujarFilaTeclasNombre(segundaFila, cantidadSegundaFila, 126, 7U);
+
+    ComColor(44, 92, 142);
+    if (botonTeclado(14U, 10, 172, 135, 34, 26,
+                      paginaTecladoNombre == 0U ? "O-Z" : "A-N"))
+    {
+        paginaTecladoNombre = (paginaTecladoNombre == 0U) ? 1U : 0U;
+    }
+    if (botonTeclado(15U, 155, 172, 150, 34, 26, "ESPACIO"))
+    {
+        anadirCaracterNombre(' ');
+    }
+    ComColor(205, 75, 65);
+    if (botonTeclado(16U, 315, 172, 155, 34, 26, "BORRAR"))
+    {
+        if (longitudNombreEdicion > 0U)
+        {
+            longitudNombreEdicion--;
+            nombreEdicionMedicamento[longitudNombreEdicion] = '\0';
+        }
+    }
+
+    ComColor(120, 120, 120);
+    BotonCancelarNombreMedicamento = botonAlSoltar(6U, 10, 220, 210, 40, 26,
+                                                    "CANCELAR");
+    if (longitudNombreEdicion == 0U)
+    {
+        ComColor(150, 150, 150);
+        ComButton(260, 220, 210, 40, 26, 0, "ACEPTAR");
+    }
+    else
+    {
+        ComColor(35, 145, 75);
+        BotonAceptarNombreMedicamento = botonAlSoltar(7U, 260, 220, 210, 40,
+                                                       26, "ACEPTAR");
+    }
     Dibuja();
 }
 
 /*
  * Pantalla de seleccion de medicamento.
  * Desde aqui el cuidador crea un hueco, activa/desactiva el medicamento completo
- * o entra en su editor de horarios. El borrado queda fuera de esta primera
- * version para evitar eliminar tratamientos por error.
+ * o entra en su editor de horarios. El borrado requiere una segunda pulsacion
+ * para evitar eliminar tratamientos por error.
  */
 void dibujarPantallaConfiguracion(void)
 {
@@ -676,6 +868,7 @@ void dibujarPantallaConfiguracion(void)
     BotonCrearMedicamento = 0;
     BotonCambiarActividadMedicamento = 0;
     BotonEditarMedicamento = 0;
+    BotonEliminarMedicamento = 0;
 
     Nueva_pantalla(248, 249, 251);
 
@@ -691,11 +884,13 @@ void dibujarPantallaConfiguracion(void)
         IndiceMedicamentoEdicion = (IndiceMedicamentoEdicion == 0U) ?
                                    (MAX_MEDICAMENTOS - 1U) :
                                    (uint8_t)(IndiceMedicamentoEdicion - 1U);
+        confirmarBorradoMedicamento = false;
     }
     if (botonEdicion(1U, 415, 55, 55, 36, 28, ">"))
     {
         IndiceMedicamentoEdicion =
             (uint8_t)((IndiceMedicamentoEdicion + 1U) % MAX_MEDICAMENTOS);
+        confirmarBorradoMedicamento = false;
     }
 
     sprintf(texto, "MEDICAMENTO %u/%u",
@@ -705,13 +900,37 @@ void dibujarPantallaConfiguracion(void)
     ComTXT(240, 58, 26, OPT_CENTERX, texto);
 
     medicamento = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
-    if (medicamento == NULL)
+    if (confirmarBorradoMedicamento && medicamento != NULL)
+    {
+        sprintf(nombreMedicamento, "%s", medicamento->nombre);
+        ComColor(248, 249, 251);
+        ComRect(25, 70, 455, 208, true);
+        ComColor(44, 92, 142);
+        ComRect(25, 70, 455, 208, false);
+        ComColor(0, 0, 0);
+        ComTXT(240, 82, 28, OPT_CENTERX, "QUIERE ELIMINAR?");
+        ComTXT(240, 116, 29, OPT_CENTERX, nombreMedicamento);
+        ComTXT(240, 145, 26, OPT_CENTERX, "TAMBIEN SUS HORARIOS");
+
+        ComColor(120, 120, 120);
+        if (botonEdicion(5U, 40, 160, 180, 38, 26, "CANCELAR"))
+        {
+            confirmarBorradoMedicamento = false;
+        }
+        ComColor(205, 75, 65);
+        if (botonEdicion(6U, 260, 160, 180, 38, 26, "CONFIRMAR"))
+        {
+            BotonEliminarMedicamento = 1;
+            confirmarBorradoMedicamento = false;
+        }
+    }
+    else if (medicamento == NULL)
     {
         ComColor(90, 90, 90);
         ComTXT(240, 108, 29, OPT_CENTERX, "HUECO LIBRE");
         ComTXT(240, 140, 26, OPT_CENTERX, "SIN HORARIOS");
         ComColor(35, 145, 75);
-        if (botonEdicion(2U, 120, 168, 240, 38, 26, "CREAR NUEVO"))
+        if (botonAlSoltar(5U, 120, 168, 240, 38, 26, "CREAR NUEVO"))
         {
             BotonCrearMedicamento = 1;
         }
@@ -731,22 +950,36 @@ void dibujarPantallaConfiguracion(void)
         ComColor(medicamento->activo ? 180 : 35,
                  medicamento->activo ? 100 : 145,
                  medicamento->activo ? 0 : 75);
-        if (botonEdicion(2U, 15, 168, 220, 38, 26,
+        if (botonEdicion(2U, 10, 168, 145, 38, 26,
                           medicamento->activo ? "DESACTIVAR" : "ACTIVAR"))
         {
             BotonCambiarActividadMedicamento = 1;
         }
 
         ComColor(44, 92, 142);
-        if (botonEdicion(3U, 245, 168, 220, 38, 26, "EDITAR"))
+        if (botonAlSoltar(4U, 167, 168, 145, 38, 26, "EDITAR"))
         {
             BotonEditarMedicamento = 1;
         }
+
+        ComColor(205, 75, 65);
+        if (botonEdicion(4U, 324, 168, 145, 38, 26, "ELIMINAR"))
+        {
+            confirmarBorradoMedicamento = true;
+        }
     }
 
-    ComColor(205, 75, 65);
-    BotonVolverConfiguracion = Boton(125, 218, 230, 44, 26,
-                                      "VOLVER A CUIDADOR");
+    if (confirmarBorradoMedicamento)
+    {
+        ComColor(150, 150, 150);
+        ComButton(125, 218, 230, 44, 26, 0, "VOLVER A CUIDADOR");
+    }
+    else
+    {
+        ComColor(205, 75, 65);
+        BotonVolverConfiguracion = botonAlSoltar(3U, 125, 218, 230, 44, 26,
+                                                  "VOLVER A CUIDADOR");
+    }
     Dibuja();
 }
 
@@ -758,13 +991,17 @@ void dibujarPantallaConfiguracion(void)
 void dibujarPantallaEdicionMedicamento(void)
 {
     const MedicConfig *medicamento;
-    const HorarioConfig *horario;
+    const HorarioConfig *horario = NULL;
     bool horarioActivo;
     char texto[32];
     char nombreMedicamento[MAX_NOMBRES_MEDICAMENTOS];
 
     BotonAgregarHorario = 0;
     BotonCambiarActividadHorario = 0;
+    BotonEditarDiasHorario = 0;
+    BotonEditarNombreMedicamento = 0;
+    BotonEliminarHorario = 0;
+    BotonGuardarMedicamento = 0;
     BotonHoraMenos = 0;
     BotonHoraMas = 0;
     BotonMinutoMenos = 0;
@@ -789,52 +1026,38 @@ void dibujarPantallaEdicionMedicamento(void)
         ComColor(0, 0, 0);
         ComTXT(240, 45, 26, OPT_CENTERX, nombreMedicamento);
 
-        if (medicamento->horariosUsados == 0U)
+        ComColor(44, 92, 142);
+        if (botonEdicion(4U, 10, 70, 55, 36, 28, "<"))
         {
-            ComColor(90, 90, 90);
-            ComTXT(240, 100, 28, OPT_CENTERX, "SIN HORARIOS");
-            ComColor(35, 145, 75);
-            if (botonEdicion(11U, 105, 150, 270, 42, 26, "ANADIR HORARIO"))
-            {
-                BotonAgregarHorario = 1;
-            }
+            IndiceHorarioEdicion = (IndiceHorarioEdicion == 0U) ?
+                (MAX_HORARIOS_MEDICAMENTOS - 1U) :
+                (uint8_t)(IndiceHorarioEdicion - 1U);
+            confirmarBorradoHorario = false;
         }
-        else
+        if (botonEdicion(5U, 415, 70, 55, 36, 28, ">"))
         {
-            if (IndiceHorarioEdicion >= medicamento->horariosUsados)
-            {
-                IndiceHorarioEdicion = (uint8_t)(medicamento->horariosUsados - 1U);
-            }
+            IndiceHorarioEdicion =
+                (IndiceHorarioEdicion + 1U == MAX_HORARIOS_MEDICAMENTOS) ?
+                0U : (uint8_t)(IndiceHorarioEdicion + 1U);
+            confirmarBorradoHorario = false;
+        }
 
-            /* Estas flechas cambian el horario seleccionado, no modifican su hora. */
-            ComColor(44, 92, 142);
-            if (botonEdicion(4U, 10, 70, 55, 36, 28, "<"))
-            {
-                IndiceHorarioEdicion = (IndiceHorarioEdicion == 0U) ?
-                    (uint8_t)(medicamento->horariosUsados - 1U) :
-                    (uint8_t)(IndiceHorarioEdicion - 1U);
-            }
-            if (botonEdicion(5U, 415, 70, 55, 36, 28, ">"))
-            {
-                IndiceHorarioEdicion =
-                    (uint8_t)((IndiceHorarioEdicion + 1U) % medicamento->horariosUsados);
-            }
+        sprintf(texto, "HORARIO %u/%u",
+                (unsigned int)(IndiceHorarioEdicion + 1U),
+                (unsigned int)MAX_HORARIOS_MEDICAMENTOS);
+        ComColor(55, 55, 55);
+        ComTXT(240, 68, 26, OPT_CENTERX, texto);
 
-            horario = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
-                                                 IndiceHorarioEdicion);
-            if (horario != NULL)
-            {
+        horario = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                             IndiceHorarioEdicion);
+        if (horario != NULL)
+        {
                 horarioActivo =
                     ((horario->diasSemana & HORARIO_DESACTIVADO) == 0U);
-                sprintf(texto, "HORARIO %u/%u",
-                        (unsigned int)(IndiceHorarioEdicion + 1U),
-                        (unsigned int)medicamento->horariosUsados);
-                ComColor(55, 55, 55);
-                ComTXT(240, 76, 26, OPT_CENTERX, texto);
                 sprintf(texto, "%02u:%02u", (unsigned int)horario->hora,
                         (unsigned int)horario->minuto);
                 ComColor(0, 0, 0);
-                ComTXT(240, 104, 31, OPT_CENTERX, texto);
+                ComTXT(240, 88, 31, OPT_CENTERX, texto);
 
                 /* Los cuatro controles cambian una unidad y main.c conserva los dias. */
                 ComColor(44, 92, 142);
@@ -858,33 +1081,153 @@ void dibujarPantallaEdicionMedicamento(void)
                 ComColor(horarioActivo ? 180 : 35,
                          horarioActivo ? 100 : 145,
                          horarioActivo ? 0 : 75);
-                if (botonEdicion(10U, 15, 185, 220, 36, 26,
+                if (botonEdicion(10U, 10, 185, 145, 36, 26,
                                   horarioActivo ? "DESACTIVAR" : "ACTIVAR"))
                 {
                     BotonCambiarActividadHorario = 1;
                 }
-            }
 
-            if (medicamento->horariosUsados < MAX_HORARIOS_MEDICAMENTOS)
-            {
-                ComColor(35, 145, 75);
-                if (botonEdicion(11U, 245, 185, 220, 36, 26, "ANADIR"))
+                ComColor(44, 92, 142);
+                if (botonAlSoltar(9U, 167, 185, 135, 36, 26, "DIAS"))
                 {
-                    BotonAgregarHorario = 1;
+                    BotonEditarDiasHorario = 1;
                 }
-            }
-            else
+                ComColor(44, 92, 142);
+                if (botonAlSoltar(12U, 312, 185, 158, 36, 26, "NOMBRE"))
+                {
+                    BotonEditarNombreMedicamento = 1;
+                }
+        }
+        else
+        {
+            ComColor(90, 90, 90);
+            ComTXT(240, 110, 28, OPT_CENTERX, "HUECO LIBRE");
+            ComColor(35, 145, 75);
+            if (botonEdicion(12U, 120, 170, 240, 42, 26, "ANADIR HORARIO"))
             {
-                ComColor(140, 140, 140);
-                ComButton(245, 185, 220, 36, 26, 0, "MAXIMO 3");
+                BotonAgregarHorario = 1;
             }
         }
     }
 
+    if (horario != NULL)
+    {
+        ComColor(205, 75, 65);
+        if (!confirmarBorradoHorario)
+        {
+            if (botonEdicion(13U, 10, 228, 145, 36, 26, "BORRAR"))
+            {
+                confirmarBorradoHorario = true;
+            }
+        }
+        else
+        {
+            if (botonEdicion(13U, 10, 228, 145, 36, 26, "CONFIRMAR?"))
+            {
+                BotonEliminarHorario = 1;
+                confirmarBorradoHorario = false;
+            }
+        }
+    }
+
+    ComColor(35, 145, 75);
+    if (botonEdicion(21U, 167, 228, 145, 36, 26, "GUARDAR"))
+    {
+        BotonGuardarMedicamento = 1;
+    }
     ComColor(205, 75, 65);
-    BotonVolverEdicionMedicamento = Boton(110, 228, 260, 36, 26,
-                                           "VOLVER A MEDICAMENTO");
-    /* Siguiente ampliacion: editar nombre y mascara de dias de la semana. */
+    BotonVolverEdicionMedicamento = botonAlSoltar(8U, 324, 228, 145, 36, 26,
+                                                   "VOLVER");
+    Dibuja();
+}
+
+/* Editor de la máscara semanal: permite activar o desactivar cada día de un horario. */
+void dibujarPantallaDiasHorario(void)
+{
+    const HorarioConfig *horario;
+    uint8_t diasSemana;
+
+    BotonAlternarDiaHorario = 0;
+    Nueva_pantalla(248, 249, 251);
+    ComColor(44, 92, 142);
+    ComRect(0, 0, 480, 40, true);
+    ComColor(255, 255, 255);
+    ComTXT(240, 8, 30, OPT_CENTERX, "DIAS DEL HORARIO");
+
+    horario = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                         IndiceHorarioEdicion);
+    if (horario == NULL)
+    {
+        ComColor(90, 90, 90);
+        ComTXT(240, 105, 26, OPT_CENTERX, "HORARIO NO DISPONIBLE");
+    }
+    else
+    {
+        diasSemana = horario->diasSemana & DIA_TODOS;
+        ComColor(55, 55, 55);
+        ComTXT(240, 55, 26, OPT_CENTERX, "SELECCIONE LOS DIAS");
+
+        ComColor((diasSemana & DIA_LUNES) ? 35 : 150,
+                 (diasSemana & DIA_LUNES) ? 145 : 150,
+                 (diasSemana & DIA_LUNES) ? 75 : 150);
+        if (botonEdicion(14U, 10, 100, 105, 38, 26, "LUN"))
+        {
+            DiaHorarioEdicion = DIA_LUNES;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_MARTES) ? 35 : 150,
+                 (diasSemana & DIA_MARTES) ? 145 : 150,
+                 (diasSemana & DIA_MARTES) ? 75 : 150);
+        if (botonEdicion(15U, 125, 100, 105, 38, 26, "MAR"))
+        {
+            DiaHorarioEdicion = DIA_MARTES;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_MIERCOLES) ? 35 : 150,
+                 (diasSemana & DIA_MIERCOLES) ? 145 : 150,
+                 (diasSemana & DIA_MIERCOLES) ? 75 : 150);
+        if (botonEdicion(16U, 240, 100, 105, 38, 26, "MIE"))
+        {
+            DiaHorarioEdicion = DIA_MIERCOLES;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_JUEVES) ? 35 : 150,
+                 (diasSemana & DIA_JUEVES) ? 145 : 150,
+                 (diasSemana & DIA_JUEVES) ? 75 : 150);
+        if (botonEdicion(17U, 355, 100, 105, 38, 26, "JUE"))
+        {
+            DiaHorarioEdicion = DIA_JUEVES;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_VIERNES) ? 35 : 150,
+                 (diasSemana & DIA_VIERNES) ? 145 : 150,
+                 (diasSemana & DIA_VIERNES) ? 75 : 150);
+        if (botonEdicion(18U, 50, 150, 120, 38, 26, "VIE"))
+        {
+            DiaHorarioEdicion = DIA_VIERNES;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_SABADO) ? 35 : 150,
+                 (diasSemana & DIA_SABADO) ? 145 : 150,
+                 (diasSemana & DIA_SABADO) ? 75 : 150);
+        if (botonEdicion(19U, 180, 150, 120, 38, 26, "SAB"))
+        {
+            DiaHorarioEdicion = DIA_SABADO;
+            BotonAlternarDiaHorario = 1;
+        }
+        ComColor((diasSemana & DIA_DOMINGO) ? 35 : 150,
+                 (diasSemana & DIA_DOMINGO) ? 145 : 150,
+                 (diasSemana & DIA_DOMINGO) ? 75 : 150);
+        if (botonEdicion(20U, 310, 150, 120, 38, 26, "DOM"))
+        {
+            DiaHorarioEdicion = DIA_DOMINGO;
+            BotonAlternarDiaHorario = 1;
+        }
+    }
+
+    ComColor(205, 75, 65);
+    BotonVolverDiasHorario = botonAlSoltar(10U, 110, 220, 260, 40, 26,
+                                            "VOLVER A HORARIOS");
     Dibuja();
 }
 
