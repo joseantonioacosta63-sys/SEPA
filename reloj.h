@@ -15,7 +15,7 @@
 #define DIA_TODOS     (DIA_LUNES | DIA_MARTES | DIA_MIERCOLES | DIA_JUEVES | \
                        DIA_VIERNES | DIA_SABADO | DIA_DOMINGO)
 
-/* Reinicia el reloj hasta que el usuario introduzca una fecha y hora válidas. */
+/* Reinicia el reloj hasta que el usuario introduzca una fecha y hora validas. */
 void inicializarReloj(void);
 /* Avanza un segundo; se llama desde el programa principal, nunca desde la ISR. */
 void actualizarReloj(void);
@@ -23,15 +23,15 @@ void actualizarReloj(void);
 void obtenerHora(uint8_t *h, uint8_t *m, uint8_t *s);
 /* Copia la fecha actual en los punteros proporcionados por quien llama. */
 void obtenerFecha(uint8_t *dia, uint8_t *mes, uint16_t *anio);
-/* Comprueba que fecha y hora están dentro de los límites del calendario. */
+/* Comprueba que fecha y hora estan dentro de los limites del calendario. */
 bool fechaHoraEsValida(uint8_t dia, uint8_t mes, uint16_t anio,
                        uint8_t hora, uint8_t minuto, uint8_t segundo);
-/* Aplica una fecha/hora válida y habilita el avance normal del reloj. */
+/* Aplica una fecha/hora valida y habilita el avance normal del reloj. */
 bool establecerFechaHora(uint8_t dia, uint8_t mes, uint16_t anio,
                          uint8_t hora, uint8_t minuto, uint8_t segundo);
-/* Devuelve el bit del día semanal actual, compatible con DIA_LUNES, etc. */
+/* Devuelve el bit del dia semanal actual, compatible con DIA_LUNES, etc. */
 uint8_t obtenerDiaSemana(void);
-/* Devuelve los días completos transcurridos desde la configuración inicial. */
+/* Devuelve los dias completos transcurridos desde la configuracion inicial. */
 uint32_t obtenerNumeroDia(void);
 
 #endif

@@ -9,7 +9,7 @@
 #define REGISTRO_H_
 #include <stdint.h>
 
-/* Distingue una toma confirmada de una toma que venció sin confirmarse. */
+/* Distingue una toma confirmada de una toma que vencio sin confirmarse. */
 typedef enum
 {
     REGISTRO_CONFIRMACION,
@@ -29,13 +29,13 @@ typedef struct
 
 } RegistroToma;
 
-/* Vacía el historial que reside en RAM al iniciar el programa. */
+/* Vacia el historial que reside en RAM al iniciar el programa. */
 void inicializarRegistro(void);
-/* Añade una entrada y descarta la más antigua cuando el búfer está lleno. */
+/* A�ade una entrada y descarta la mas antigua cuando el bufer esta lleno. */
 void agregarRegistro(RegistroToma nuevaToma);
-/* Informa de cuántas entradas válidas contiene el historial. */
+/* Informa de cuantos registros validos contiene el historial. */
 uint8_t obtenerNumeroRegistros(void);
-/* Devuelve una entrada de solo lectura o NULL si el índice no existe. */
+/* Devuelve una entrada de solo lectura o NULL si el indice no existe. */
 const RegistroToma *obtenerRegistro(uint8_t indice);
 
 #endif /* REGISTRO_H_ */

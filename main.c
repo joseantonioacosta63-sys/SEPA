@@ -17,25 +17,28 @@
 /* Timer0A genera 50 interrupciones por segundo: una cada 20 ms. */
 #define FREC 50
 
-/* Frecuencia real del sistema, usada al configurar periféricos y temporizadores. */
+/* Frecuencia real del sistema, usada al configurar perifericos y temporizadores. */
 int RELOJ;
-/* Estados de navegación; la pantalla de fecha bloquea el resto hasta aceptar datos. */
-#define PANTALLA_FECHA_HORA 0U
-#define PANTALLA_INICIO     1U
-#define PANTALLA_CUIDADOR   2U
-#define PANTALLA_CONFIGURACION 3U
-#define PANTALLA_EDICION_MEDICAMENTO 4U
-#define PANTALLA_DIAS_HORARIO 5U
-#define PANTALLA_NOMBRE_MEDICAMENTO 6U
+/* Estados de navegacion; la pantalla de fecha bloquea el resto hasta aceptar datos. */
+typedef enum
+{
+    PANTALLA_FECHA_HORA = 0,
+    PANTALLA_INICIO,
+    PANTALLA_CUIDADOR,
+    PANTALLA_CONFIGURACION,
+    PANTALLA_EDICION_MEDICAMENTO,
+    PANTALLA_DIAS_HORARIO,
+    PANTALLA_NOMBRE_MEDICAMENTO
+} PantallaActual;
 
-uint8_t pantallaActual = PANTALLA_FECHA_HORA;
+static PantallaActual pantallaActual = PANTALLA_FECHA_HORA;
 float T_act = 0.0f;
 bool SensorDisponible = false;
 
 /* La ISR solo acumula ticks; el bucle principal realiza el trabajo pesado. */
-volatile uint32_t ticksPendientes = 0;
+static volatile uint32_t ticksPendientes = 0;
 
-/* Interrupción de Timer0A: reconoce el evento y deja un tick pendiente. */
+/* Interrupcion de Timer0A: reconoce el evento y deja un tick pendiente. */
 void IntTimer(void)
 {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
@@ -46,7 +49,7 @@ void IntTimer(void)
 static void mostrarHistorialUART(void);
 static void registrarExpiracionesPendientes(void);
 
-/* Sondeo I2C con tiempo máximo para comprobar si existe un BME280 en una dirección. */
+/* Sondeo I2C con tiempo maximo para comprobar si existe un BME280 en una direccion. */
 static bool detectarDireccionBME280(uint32_t baseI2C, uint8_t direccion)
 {
     uint32_t intentos;
@@ -67,7 +70,7 @@ static bool detectarDireccionBME280(uint32_t baseI2C, uint8_t direccion)
             I2CMasterErr(baseI2C) == I2C_MASTER_ERR_NONE);
 }
 
-/* Confirma una toma y añade al historial RAM únicamente las confirmaciones aceptadas. */
+/* Confirma una toma y añade al historial RAM unicamente las confirmaciones aceptadas. */
 void confirmarYRegistrar(uint8_t indiceMedicamento, uint8_t indiceHorario)
 {
     RegistroToma nuevaToma = {0};
@@ -107,7 +110,7 @@ void confirmarYRegistrar(uint8_t indiceMedicamento, uint8_t indiceHorario)
     }
 }
 
-/* Consume las expiraciones marcadas por medicación y las vuelca una vez al historial. */
+/* Consume las expiraciones marcadas por medicacion y las vuelca una vez al historial. */
 static void registrarExpiracionesPendientes(void)
 {
     uint8_t indiceMedicamento;
@@ -147,7 +150,7 @@ static void registrarExpiracionesPendientes(void)
 }
 
 
-/* Muestra el historial temporal para depuración y supervisión desde el ordenador. */
+/* Muestra el historial temporal para depuracion y supervision desde el ordenador. */
 static void mostrarHistorialUART(void)
 {
     uint8_t i;
@@ -172,8 +175,14 @@ static void mostrarHistorialUART(void)
                        registro->horaConfirmada,
                        registro->minutoConfirmada);
 
-            UARTprintf("Tipo: %s\r\n", registro->tipo == REGISTRO_EXPIRACION ?
-                       "EXPIRACION" : "CONFIRMACION");
+            if (registro->tipo == REGISTRO_EXPIRACION)
+            {
+                UARTprintf("Tipo: EXPIRACION\r\n");
+            }
+            else
+            {
+                UARTprintf("Tipo: CONFIRMACION\r\n");
+            }
 
             UARTprintf("Dia: %u\r\n",
                        (unsigned int)registro->diaToma);
@@ -216,7 +225,7 @@ int main(void)
 
     const int32_t REG_CAL[6] = {CAL_DEFAULTS};
 
-    /* Inicialización básica: reloj del micro, FT800, UART, lógica y pantalla inicial. */
+    /* Inicializacion basica de: reloj del micro, FT800, UART, logica y pantalla inicial. */
     RELOJ = SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
         SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480, 120000000);
 
@@ -245,7 +254,7 @@ int main(void)
 
     cargarImagenPastillero();
 
-    /* Timer0A mantiene una base de tiempo de 20 ms; no ejecuta la aplicación en la ISR. */
+    /* Timer0A mantiene una base de tiempo de 20 ms; no ejecuta la aplicacion en la ISR. */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
 
     TimerClockSourceSet(TIMER0_BASE, TIMER_CLOCK_SYSTEM);
@@ -328,6 +337,8 @@ int main(void)
 
     while (1)
     {
+        bool refrescarPantalla = false;
+
         IntMasterDisable();
         pendientes = ticksPendientes;
         ticksPendientes = 0;
@@ -369,268 +380,354 @@ int main(void)
         if (contadorPantalla >= 5)
         {
             contadorPantalla = contadorPantalla % 5;
+            refrescarPantalla = true;
+        }
 
-            if (pantallaActual == PANTALLA_FECHA_HORA)
+        /* Cada estado reune su representacion y los eventos que puede atender. */
+        switch (pantallaActual)
+        {
+        case PANTALLA_FECHA_HORA:
+            if (refrescarPantalla)
             {
                 dibujarPantallaFechaHora();
             }
-            else if (pantallaActual == PANTALLA_INICIO)
+            if (BotonAceptarFechaHora != 0)
+            {
+                pantallaActual = PANTALLA_INICIO;
+                BotonAceptarFechaHora = 0;
+                gestionarMedicacion();
+                registrarExpiracionesPendientes();
+            }
+            break;
+
+        case PANTALLA_INICIO:
+            if (refrescarPantalla)
             {
                 dibujarPantallaInicio();
             }
-            else if (pantallaActual == PANTALLA_CUIDADOR)
+            if (BotonCuidador != 0)
+            {
+                pantallaActual = PANTALLA_CUIDADOR;
+                BotonCuidador = 0;
+                BotonVolver = 0;
+            }
+            break;
+
+        case PANTALLA_CUIDADOR:
+            if (refrescarPantalla)
             {
                 dibujarPantallaCuidador();
             }
-            else if (pantallaActual == PANTALLA_CONFIGURACION)
+            if (BotonVolver != 0)
+            {
+                pantallaActual = PANTALLA_INICIO;
+                BotonCuidador = 0;
+                BotonVolver = 0;
+            }
+            else if (BotonConfiguracion != 0)
+            {
+                pantallaActual = PANTALLA_CONFIGURACION;
+                BotonConfiguracion = 0;
+                BotonVolverConfiguracion = 0;
+            }
+            else if (BotonConfirmarToma != 0)
+            {
+                confirmarYRegistrar(IndiceMedicamentoConfirmar, IndiceHorarioConfirmar);
+                BotonConfirmarToma = 0;
+            }
+            break;
+
+        case PANTALLA_CONFIGURACION:
+            if (refrescarPantalla)
             {
                 dibujarPantallaConfiguracion();
             }
-            else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO)
+            if (BotonVolverConfiguracion != 0)
             {
-                dibujarPantallaEdicionMedicamento();
+                pantallaActual = PANTALLA_CUIDADOR;
+                BotonVolverConfiguracion = 0;
             }
-            else if (pantallaActual == PANTALLA_DIAS_HORARIO)
+            else if (BotonEditarMedicamento != 0)
             {
-                dibujarPantallaDiasHorario();
-            }
-            else if (pantallaActual == PANTALLA_NOMBRE_MEDICAMENTO)
-            {
-                dibujarPantallaNombreMedicamento();
-            }
-        }
-        if (pantallaActual == PANTALLA_FECHA_HORA && BotonAceptarFechaHora != 0)
-        {
-            pantallaActual = PANTALLA_INICIO;
-            BotonAceptarFechaHora = 0;
-            gestionarMedicacion();
-            registrarExpiracionesPendientes();
-        }
-        else if (pantallaActual == PANTALLA_INICIO && BotonCuidador != 0)
-        {
-            pantallaActual = PANTALLA_CUIDADOR;
-            BotonCuidador = 0;
-            BotonVolver = 0;
-        }
-        else if (pantallaActual == PANTALLA_CUIDADOR && BotonVolver != 0)
-        {
-            pantallaActual = PANTALLA_INICIO;
-            BotonCuidador = 0;
-            BotonVolver = 0;
-        }
-        else if (pantallaActual == PANTALLA_CUIDADOR && BotonConfiguracion != 0)
-        {
-            pantallaActual = PANTALLA_CONFIGURACION;
-            BotonConfiguracion = 0;
-            BotonVolverConfiguracion = 0;
-        }
-        else if (pantallaActual == PANTALLA_CONFIGURACION && BotonVolverConfiguracion != 0)
-        {
-            pantallaActual = PANTALLA_CUIDADOR;
-            BotonVolverConfiguracion = 0;
-        }
-        else if (pantallaActual == PANTALLA_CONFIGURACION && BotonEditarMedicamento != 0)
-        {
-            /* El editor comienza siempre seleccionando el primer horario. */
-            medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
-            if (medicamentoEdicion != NULL)
-            {
-                respaldoMedicamentoEdicion = *medicamentoEdicion;
-                hayRespaldoMedicamento = true;
-                pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
-                IndiceHorarioEdicion = 0U;
-            }
-            BotonEditarMedicamento = 0;
-            BotonVolverEdicionMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_CONFIGURACION && BotonCrearMedicamento != 0)
-        {
-            creandoMedicamento = true;
-            respaldoMedicamentoEdicion = (MedicConfig){0};
-            hayRespaldoMedicamento = true;
-            iniciarEdicionNombreMedicamento(NULL);
-            pantallaActual = PANTALLA_NOMBRE_MEDICAMENTO;
-            BotonCrearMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_NOMBRE_MEDICAMENTO && BotonCancelarNombreMedicamento != 0)
-        {
-            pantallaActual = creandoMedicamento ? PANTALLA_CONFIGURACION :
-                                                 PANTALLA_EDICION_MEDICAMENTO;
-            creandoMedicamento = false;
-            if (pantallaActual == PANTALLA_CONFIGURACION)
-            {
-                hayRespaldoMedicamento = false;
-            }
-            BotonCancelarNombreMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
-                 BotonEditarNombreMedicamento != 0)
-        {
-            medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
-            if (medicamentoEdicion != NULL)
-            {
-                creandoMedicamento = false;
-                iniciarEdicionNombreMedicamento(medicamentoEdicion->nombre);
-                pantallaActual = PANTALLA_NOMBRE_MEDICAMENTO;
-            }
-            BotonEditarNombreMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonVolverEdicionMedicamento != 0)
-        {
-            if (hayRespaldoMedicamento)
-            {
-                restaurarMedicamento(IndiceMedicamentoEdicion, &respaldoMedicamentoEdicion);
-                gestionarMedicacion();
-                hayRespaldoMedicamento = false;
-            }
-            pantallaActual = PANTALLA_CONFIGURACION;
-            BotonVolverEdicionMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonEditarDiasHorario != 0)
-        {
-            pantallaActual = PANTALLA_DIAS_HORARIO;
-            BotonEditarDiasHorario = 0;
-            BotonVolverDiasHorario = 0;
-        }
-        else if (pantallaActual == PANTALLA_DIAS_HORARIO && BotonVolverDiasHorario != 0)
-        {
-            pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
-            BotonVolverDiasHorario = 0;
-        }
-
-        if (pantallaActual == PANTALLA_NOMBRE_MEDICAMENTO && BotonAceptarNombreMedicamento != 0)
-        {
-            if ((creandoMedicamento &&
-                 crearMedicamento(IndiceMedicamentoEdicion, obtenerNombreEdicionMedicamento())) ||
-                (!creandoMedicamento &&
-                 editarNombreMedicamento(IndiceMedicamentoEdicion, obtenerNombreEdicionMedicamento())))
-            {
-                gestionarMedicacion();
-                if (creandoMedicamento)
-                {
-                    IndiceHorarioEdicion = 0U;
-                }
-                pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
-                creandoMedicamento = false;
-            }
-            BotonAceptarNombreMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_CONFIGURACION && BotonCambiarActividadMedicamento != 0)
-        {
-            medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
-            if (medicamentoEdicion != NULL &&
-                establecerMedicamentoActivo(IndiceMedicamentoEdicion, !medicamentoEdicion->activo))
-            {
-                gestionarMedicacion();
-            }
-            BotonCambiarActividadMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_CONFIGURACION && BotonEliminarMedicamento != 0)
-        {
-            if (eliminarMedicamento(IndiceMedicamentoEdicion))
-            {
-                guardarConfiguracionMedicacion();
-                gestionarMedicacion();
-            }
-            BotonEliminarMedicamento = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonAgregarHorario != 0)
-        {
-            medicamentoEdicion =  obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
-            indiceNuevoHorario = (medicamentoEdicion == NULL) ? 0U : medicamentoEdicion->horariosUsados;
-            if (medicamentoEdicion != NULL && indiceNuevoHorario < MAX_HORARIOS_MEDICAMENTOS &&
-                agregarHorarioMedicamento(IndiceMedicamentoEdicion, 8U, 0U, DIA_TODOS))
-            {
-                /* El nuevo horario queda seleccionado para editarlo inmediatamente. */
-                IndiceHorarioEdicion = indiceNuevoHorario;
-                gestionarMedicacion();
-            }
-            BotonAgregarHorario = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonCambiarActividadHorario != 0)
-        {
-            horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion, IndiceHorarioEdicion);
-            horarioActivo = (horarioEdicion != NULL && (horarioEdicion->diasSemana & HORARIO_DESACTIVADO) == 0U);
-            if (horarioEdicion != NULL &&
-                establecerHorarioActivo(IndiceMedicamentoEdicion, IndiceHorarioEdicion, !horarioActivo))
-            {
-                gestionarMedicacion();
-            }
-            BotonCambiarActividadHorario = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonEliminarHorario != 0)
-        {
-            if (eliminarHorarioMedicamento(IndiceMedicamentoEdicion, IndiceHorarioEdicion))
-            {
-                gestionarMedicacion();
-            }
-            BotonEliminarHorario = 0;
-        }
-        else if (pantallaActual == PANTALLA_DIAS_HORARIO && BotonAlternarDiaHorario != 0)
-        {
-            if (alternarDiaHorario(IndiceMedicamentoEdicion, IndiceHorarioEdicion, DiaHorarioEdicion))
-            {
-                gestionarMedicacion();
-            }
-            BotonAlternarDiaHorario = 0;
-        }
-        else if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO &&
-                 (BotonHoraMenos != 0 || BotonHoraMas != 0 || BotonMinutoMenos != 0 || BotonMinutoMas != 0))
-        {
-            horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion, IndiceHorarioEdicion);
-            if (horarioEdicion != NULL)
-            {
-                horaNueva = horarioEdicion->hora;
-                minutoNuevo = horarioEdicion->minuto;
-
-                /* Las horas y minutos son circulares para no salir de sus limites. */
-                if (BotonHoraMenos != 0)
-                {
-                    horaNueva = (horaNueva == 0U) ? 23U : (uint8_t)(horaNueva - 1U);
-                }
-                else if (BotonHoraMas != 0)
-                {
-                    horaNueva = (horaNueva == 23U) ? 0U : (uint8_t)(horaNueva + 1U);
-                }
-                else if (BotonMinutoMenos != 0)
-                {
-                    minutoNuevo = (minutoNuevo == 0U) ? 59U : (uint8_t)(minutoNuevo - 1U);
-                }
-                else
-                {
-                    minutoNuevo = (minutoNuevo == 59U) ? 0U : (uint8_t)(minutoNuevo + 1U);
-                }
-
-                if (editarHorarioMedicamento(IndiceMedicamentoEdicion, IndiceHorarioEdicion, horaNueva,
-                                             minutoNuevo, horarioEdicion->diasSemana))
-                {
-                    gestionarMedicacion();
-                }
-            }
-            BotonHoraMenos = 0;
-            BotonHoraMas = 0;
-            BotonMinutoMenos = 0;
-            BotonMinutoMas = 0;
-        }
-
-        if (pantallaActual == PANTALLA_EDICION_MEDICAMENTO && BotonGuardarMedicamento != 0)
-        {
-            if (guardarConfiguracionMedicacion())
-            {
+                /* El editor comienza siempre seleccionando el primer horario. */
                 medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
                 if (medicamentoEdicion != NULL)
                 {
                     respaldoMedicamentoEdicion = *medicamentoEdicion;
                     hayRespaldoMedicamento = true;
+                    pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
+                    IndiceHorarioEdicion = 0U;
+                }
+                BotonEditarMedicamento = 0;
+                BotonVolverEdicionMedicamento = 0;
+            }
+            else if (BotonCrearMedicamento != 0)
+            {
+                creandoMedicamento = true;
+                respaldoMedicamentoEdicion = (MedicConfig){0};
+                hayRespaldoMedicamento = true;
+                iniciarEdicionNombreMedicamento(NULL);
+                pantallaActual = PANTALLA_NOMBRE_MEDICAMENTO;
+                BotonCrearMedicamento = 0;
+            }
+            else if (BotonCambiarActividadMedicamento != 0)
+            {
+                medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+                if (medicamentoEdicion != NULL &&
+                    establecerMedicamentoActivo(IndiceMedicamentoEdicion,
+                                                !medicamentoEdicion->activo))
+                {
+                    gestionarMedicacion();
+                }
+                BotonCambiarActividadMedicamento = 0;
+            }
+            else if (BotonEliminarMedicamento != 0)
+            {
+                if (eliminarMedicamento(IndiceMedicamentoEdicion))
+                {
+                    guardarConfiguracionMedicacion();
+                    gestionarMedicacion();
+                }
+                BotonEliminarMedicamento = 0;
+            }
+            break;
+
+        case PANTALLA_EDICION_MEDICAMENTO:
+            if (refrescarPantalla)
+            {
+                dibujarPantallaEdicionMedicamento();
+            }
+            if (BotonEditarNombreMedicamento != 0)
+            {
+                medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+                if (medicamentoEdicion != NULL)
+                {
+                    creandoMedicamento = false;
+                    iniciarEdicionNombreMedicamento(medicamentoEdicion->nombre);
+                    pantallaActual = PANTALLA_NOMBRE_MEDICAMENTO;
+                }
+                BotonEditarNombreMedicamento = 0;
+            }
+            else if (BotonVolverEdicionMedicamento != 0)
+            {
+                if (hayRespaldoMedicamento)
+                {
+                    restaurarMedicamento(IndiceMedicamentoEdicion,
+                                         &respaldoMedicamentoEdicion);
+                    gestionarMedicacion();
+                    hayRespaldoMedicamento = false;
+                }
+                pantallaActual = PANTALLA_CONFIGURACION;
+                BotonVolverEdicionMedicamento = 0;
+            }
+            else if (BotonEditarDiasHorario != 0)
+            {
+                pantallaActual = PANTALLA_DIAS_HORARIO;
+                BotonEditarDiasHorario = 0;
+                BotonVolverDiasHorario = 0;
+            }
+            else
+            {
+                if (BotonAgregarHorario != 0)
+                {
+                    medicamentoEdicion = obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+                    if (medicamentoEdicion == NULL)
+                    {
+                        indiceNuevoHorario = 0U;
+                    }
+                    else
+                    {
+                        indiceNuevoHorario = medicamentoEdicion->horariosUsados;
+                    }
+                    if (medicamentoEdicion != NULL &&
+                        indiceNuevoHorario < MAX_HORARIOS_MEDICAMENTOS &&
+                        agregarHorarioMedicamento(IndiceMedicamentoEdicion, 8U, 0U,
+                                                  DIA_TODOS))
+                    {
+                        /* El nuevo horario queda seleccionado para editarlo inmediatamente. */
+                        IndiceHorarioEdicion = indiceNuevoHorario;
+                        gestionarMedicacion();
+                    }
+                    BotonAgregarHorario = 0;
+                }
+                else if (BotonCambiarActividadHorario != 0)
+                {
+                    horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                                               IndiceHorarioEdicion);
+                    horarioActivo = (horarioEdicion != NULL &&
+                        (horarioEdicion->diasSemana & HORARIO_DESACTIVADO) == 0U);
+                    if (horarioEdicion != NULL &&
+                        establecerHorarioActivo(IndiceMedicamentoEdicion,
+                                                IndiceHorarioEdicion, !horarioActivo))
+                    {
+                        gestionarMedicacion();
+                    }
+                    BotonCambiarActividadHorario = 0;
+                }
+                else if (BotonEliminarHorario != 0)
+                {
+                    if (eliminarHorarioMedicamento(IndiceMedicamentoEdicion,
+                                                   IndiceHorarioEdicion))
+                    {
+                        gestionarMedicacion();
+                    }
+                    BotonEliminarHorario = 0;
+                }
+                else if (BotonHoraMenos != 0 || BotonHoraMas != 0 ||
+                         BotonMinutoMenos != 0 || BotonMinutoMas != 0)
+                {
+                    horarioEdicion = obtenerHorarioParaEdicion(IndiceMedicamentoEdicion,
+                                                               IndiceHorarioEdicion);
+                    if (horarioEdicion != NULL)
+                    {
+                        horaNueva = horarioEdicion->hora;
+                        minutoNuevo = horarioEdicion->minuto;
+
+                        /* Las horas y minutos son circulares para no salir de sus limites. */
+                        if (BotonHoraMenos != 0)
+                        {
+                            if (horaNueva == 0U)
+                            {
+                                horaNueva = 23U;
+                            }
+                            else
+                            {
+                                horaNueva = (uint8_t)(horaNueva - 1U);
+                            }
+                        }
+                        else if (BotonHoraMas != 0)
+                        {
+                            if (horaNueva == 23U)
+                            {
+                                horaNueva = 0U;
+                            }
+                            else
+                            {
+                                horaNueva = (uint8_t)(horaNueva + 1U);
+                            }
+                        }
+                        else if (BotonMinutoMenos != 0)
+                        {
+                            if (minutoNuevo == 0U)
+                            {
+                                minutoNuevo = 59U;
+                            }
+                            else
+                            {
+                                minutoNuevo = (uint8_t)(minutoNuevo - 1U);
+                            }
+                        }
+                        else
+                        {
+                            if (minutoNuevo == 59U)
+                            {
+                                minutoNuevo = 0U;
+                            }
+                            else
+                            {
+                                minutoNuevo = (uint8_t)(minutoNuevo + 1U);
+                            }
+                        }
+
+                        if (editarHorarioMedicamento(IndiceMedicamentoEdicion,
+                                                     IndiceHorarioEdicion, horaNueva,
+                                                     minutoNuevo,
+                                                     horarioEdicion->diasSemana))
+                        {
+                            gestionarMedicacion();
+                        }
+                    }
+                    BotonHoraMenos = 0;
+                    BotonHoraMas = 0;
+                    BotonMinutoMenos = 0;
+                    BotonMinutoMas = 0;
+                }
+
+                /* GUARDAR permanece separado: puede ejecutarse tras una edicion valida. */
+                if (BotonGuardarMedicamento != 0)
+                {
+                    if (guardarConfiguracionMedicacion())
+                    {
+                        medicamentoEdicion =
+                            obtenerMedicamentoParaEdicion(IndiceMedicamentoEdicion);
+                        if (medicamentoEdicion != NULL)
+                        {
+                            respaldoMedicamentoEdicion = *medicamentoEdicion;
+                            hayRespaldoMedicamento = true;
+                        }
+                    }
+                    BotonGuardarMedicamento = 0;
                 }
             }
-            BotonGuardarMedicamento = 0;
-        }
+            break;
 
-        if (pantallaActual == PANTALLA_CUIDADOR && BotonConfirmarToma != 0)
-        {
-            confirmarYRegistrar(IndiceMedicamentoConfirmar, IndiceHorarioConfirmar);
-            BotonConfirmarToma = 0;
+        case PANTALLA_DIAS_HORARIO:
+            if (refrescarPantalla)
+            {
+                dibujarPantallaDiasHorario();
+            }
+            if (BotonVolverDiasHorario != 0)
+            {
+                pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
+                BotonVolverDiasHorario = 0;
+            }
+            else if (BotonAlternarDiaHorario != 0)
+            {
+                if (alternarDiaHorario(IndiceMedicamentoEdicion,
+                                       IndiceHorarioEdicion, DiaHorarioEdicion))
+                {
+                    gestionarMedicacion();
+                }
+                BotonAlternarDiaHorario = 0;
+            }
+            break;
+
+        case PANTALLA_NOMBRE_MEDICAMENTO:
+            if (refrescarPantalla)
+            {
+                dibujarPantallaNombreMedicamento();
+            }
+            if (BotonCancelarNombreMedicamento != 0)
+            {
+                if (creandoMedicamento)
+                {
+                    pantallaActual = PANTALLA_CONFIGURACION;
+                }
+                else
+                {
+                    pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
+                }
+                creandoMedicamento = false;
+                if (pantallaActual == PANTALLA_CONFIGURACION)
+                {
+                    hayRespaldoMedicamento = false;
+                }
+                BotonCancelarNombreMedicamento = 0;
+            }
+            else if (BotonAceptarNombreMedicamento != 0)
+            {
+                if ((creandoMedicamento &&
+                     crearMedicamento(IndiceMedicamentoEdicion,
+                                       obtenerNombreEdicionMedicamento())) ||
+                    (!creandoMedicamento &&
+                     editarNombreMedicamento(IndiceMedicamentoEdicion,
+                                             obtenerNombreEdicionMedicamento())))
+                {
+                    gestionarMedicacion();
+                    if (creandoMedicamento)
+                    {
+                        IndiceHorarioEdicion = 0U;
+                    }
+                    pantallaActual = PANTALLA_EDICION_MEDICAMENTO;
+                    creandoMedicamento = false;
+                }
+                BotonAceptarNombreMedicamento = 0;
+            }
+            break;
+
+        default:
+            /* Un estado no reconocido no se procesa ni modifica los datos existentes. */
+            break;
         }
 
     }

@@ -3,8 +3,12 @@
 #include "driverlib2.h"
 #include <stddef.h>
 
-#define CONFIGURACION_FIRMA 0x53455041UL
-#define CONFIGURACION_VERSION 1UL
+#define CONFIGURACION_FIRMA 0x53455041UL /* Firma: SEPA. */
+/* La version 2 descarta las configuraciones de demostracion de la entrega. */
+#define CONFIGURACION_VERSION 2UL /* Version numero 2. */
+#define SEGUNDOS_ANTICIPACION_CONFIRMACION 600U
+#define SEGUNDOS_LIMITE_CONFIRMACION 7200U
+#define SEGUNDOS_FIN_DIA 86401U
 
 /*
  * Formato que se almacenara completo en EEPROM. Se mantiene privado porque
@@ -550,7 +554,7 @@ bool eliminarHorarioMedicamento(uint8_t indiceMedicamento, uint8_t indiceHorario
     return true;
 }
 
-/* El cambio de día reinicia la lógica de tomas sin generar registros históricos. */
+/* El cambio de dia reinicia la logica de tomas sin generar registros historicos. */
 static void reiniciarEstadosDiarios(void)
 {
     uint8_t medicamento;
@@ -566,7 +570,7 @@ static void reiniciarEstadosDiarios(void)
     }
 }
 
-/* Carga EEPROM o crea una configuración de demostración la primera vez. */
+/* Carga EEPROM o prepara una configuracion vacia para que el cuidador la complete. */
 void inicializarMedicacion(void)
 {
     reiniciarEstadosDiarios();
@@ -574,28 +578,14 @@ void inicializarMedicacion(void)
 
     if (!cargarConfiguracionMedicacion())
     {
-        /* Crear los medicamentos de demostración cuando aún no existe configuración. */
-        crearMedicamento(0, "Medicacion A");
-        crearMedicamento(1, "Medicacion B");
-        crearMedicamento(2, "Medicacion C");
-        crearMedicamento(3, "Medicacion D");
-        /* Asignar un horario diario de prueba a cada medicamento. */
-        agregarHorarioMedicamento(0, 9, 0, DIA_TODOS);
-        agregarHorarioMedicamento(1, 14, 0, DIA_TODOS);
-        agregarHorarioMedicamento(2, 21, 0, DIA_TODOS);
-        agregarHorarioMedicamento(3, 0, 0, DIA_TODOS);
-        /* Intentar guardar la configuración inicial para los siguientes arranques. */
-        guardarConfiguracionMedicacion();
-    }
-    else if (crearMedicamento(3U, "Medicacion D"))
-    {
-        /* Migracion de prueba para EEPROM ya creada con solo A, B y C. */
-        agregarHorarioMedicamento(3U, 0U, 0U, DIA_TODOS);
+        /* No se cargan medicamentos de prueba en la version de entrega. */
+        almacenamientoConfiguracion = (AlmacenamientoConfiguracion){0};
+        actualizarCabeceraConfiguracion();
         guardarConfiguracionMedicacion();
     }
 }
 
-/* Actualiza la máquina de estados de cada toma a partir del reloj y día semanal. */
+/* Actualiza la maquina de estados de cada toma a partir del reloj y dia semanal. */
 void gestionarMedicacion(void)
 {
     uint8_t horaActual;
@@ -616,7 +606,7 @@ void gestionarMedicacion(void)
     }
 
     numeroDiaActual = obtenerNumeroDia();
-    /* Cada número de día nuevo empieza con tomas PROGRAMADAS. */
+    /* Cada numero de dia nuevo empieza con tomas PROGRAMADAS. */
     if (numeroDiaActual != ultimoDiaGestionado)
     {
         reiniciarEstadosDiarios();
@@ -653,7 +643,8 @@ void gestionarMedicacion(void)
             segundosProgramados = (uint32_t)horario->hora * 3600U +
                                   (uint32_t)horario->minuto * 60U;
 
-            if (segundosActuales > (segundosProgramados + 7200U))
+            if (segundosActuales >
+                (segundosProgramados + SEGUNDOS_LIMITE_CONFIRMACION))
             {
                 estadosDiarios[indiceMedicamento][indiceHorario].estado = EXPIRADA;
                 estadosDiarios[indiceMedicamento][indiceHorario].expiracionPendienteRegistro = true;
@@ -671,7 +662,7 @@ void gestionarMedicacion(void)
     }
 }
 
-/* Entrega una expiración pendiente una sola vez para que main.c la registre por UART. */
+/* Entrega una expiracion pendiente una sola vez para que main.c la registre por UART. */
 bool obtenerExpiracionPendiente(uint8_t *indiceMedicamento, uint8_t *indiceHorario)
 {
     uint8_t medicamento;
@@ -733,9 +724,11 @@ bool puedeConfirmarToma(uint8_t indiceMedicamento, uint8_t indiceHorario)
                           (uint32_t)horario->minuto * 60U;
 
     /* Para tomas cercanas a medianoche, la ventana empieza a las 00:00. */
-    if ((segundosProgramados >= 600U &&
-         segundosActuales < (segundosProgramados - 600U)) ||
-        segundosActuales > (segundosProgramados + 7200U))
+    if ((segundosProgramados >= SEGUNDOS_ANTICIPACION_CONFIRMACION &&
+         segundosActuales < (segundosProgramados -
+                              SEGUNDOS_ANTICIPACION_CONFIRMACION)) ||
+        segundosActuales >
+        (segundosProgramados + SEGUNDOS_LIMITE_CONFIRMACION))
     {
         return false;
     }
@@ -876,7 +869,7 @@ bool obtenerTomaFuturaPorOrden(uint8_t orden, uint8_t *indiceMedicamentoResultad
     for (paso = 0U; paso <= orden; paso++)
     {
         encontrada = false;
-        mejorHora = 86401U;
+        mejorHora = SEGUNDOS_FIN_DIA;
 
         for (indiceMedicamento = 0; indiceMedicamento < MAX_MEDICAMENTOS; indiceMedicamento++)
         {
@@ -998,7 +991,7 @@ bool obtenerTomaDelDiaPorOrden(uint8_t orden, uint8_t *indiceMedicamentoResultad
     for (paso = 0U; paso <= orden; paso++)
     {
         encontrada = false;
-        mejorHora = 86401U;
+        mejorHora = SEGUNDOS_FIN_DIA;
 
         for (indiceMedicamento = 0U; indiceMedicamento < MAX_MEDICAMENTOS; indiceMedicamento++)
         {

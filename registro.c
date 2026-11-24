@@ -15,13 +15,13 @@
 static RegistroToma historial[MAX_REGISTROS];
 static uint8_t numeroRegistros = 0;
 
-/* Al reiniciar la placa no se conserva el historial; la configuración sí está en EEPROM. */
+/* Al reiniciar la placa no se conserva el historial; la configuracion si esta en EEPROM. */
 void inicializarRegistro(void)
 {
     numeroRegistros = 0;
 }
 
-/* Inserta una toma; al llenarse, desplaza el búfer y reemplaza la más antigua. */
+/* Inserta una toma; al llenarse, desplaza el bufer y reemplaza la mas antigua. */
 void agregarRegistro(RegistroToma nuevaToma)
 {
     uint8_t i;
@@ -33,26 +33,26 @@ void agregarRegistro(RegistroToma nuevaToma)
     }
     else
     {
-        /* Historial lleno: descartar el más antiguo para conservar las últimas entradas. */
+        /* Historial lleno: descartar el mas antiguo para conservar las ultimas entradas. */
         for (i = 1; i < MAX_REGISTROS; i++)
         {
             historial[i - 1] = historial[i];
         }
 
-        /* Guardar el nuevo al final tras liberar su posición. */
+        /* Guardar el nuevo al final tras liberar su posicion. */
         historial[MAX_REGISTROS - 1] = nuevaToma;
     }
 }
 
 
-/* Devuelve cuántos registros válidos se pueden consultar. */
+/* Devuelve cuantos registros validos se pueden consultar. */
 uint8_t obtenerNumeroRegistros(void)
 {
     return numeroRegistros;
 }
 
 
-/* Devuelve una referencia de solo lectura o NULL para un índice fuera de rango. */
+/* Devuelve una referencia de solo lectura o NULL para un indice fuera de rango. */
 const RegistroToma *obtenerRegistro(uint8_t indice)
 {
     if (indice >= numeroRegistros)

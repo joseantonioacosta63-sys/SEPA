@@ -5,25 +5,17 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "reloj.h"
 
-#define MAX_MEDICAMENTOS 8 //numero maximo de medicamentos que se podran almacenar
-#define MAX_HORARIOS_MEDICAMENTOS 3 //numero maximo de horarios por medicamento por cada dia
-#define MAX_NOMBRES_MEDICAMENTOS 24 //numero maximo de caracteres para los medicamentos
+#define MAX_MEDICAMENTOS 8 /* Numero maximo de medicamentos en memoria. */
+#define MAX_HORARIOS_MEDICAMENTOS 3 /* Numero maximo de horarios de cada medicamento por dia. */
+#define MAX_NOMBRES_MEDICAMENTOS 24 /* Numero maximo de caracteres para nombres. */
 
-//definiciones de los bits asociados a cada dia en diasSemana de la estructura HorarioConfig
-#define DIA_LUNES (1U << 0)
-#define DIA_MARTES (1U << 1)
-#define DIA_MIERCOLES (1U << 2)
-#define DIA_JUEVES (1U << 3)
-#define DIA_VIERNES (1U << 4)
-#define DIA_SABADO (1U << 5)
-#define DIA_DOMINGO (1U << 6)
-#define DIA_TODOS (DIA_LUNES | DIA_MARTES | DIA_MIERCOLES | DIA_JUEVES | DIA_VIERNES | DIA_SABADO | DIA_DOMINGO)
 /* El bit 7 no representa un dia: conserva un horario, pero lo desactiva. */
 #define HORARIO_DESACTIVADO (1U << 7)
 
 
-/* Hora y máscara semanal de una administración configurada. */
+/* Hora y mascara semanal de una administracion configurada. */
 typedef struct
 {
     uint8_t hora;
@@ -31,7 +23,7 @@ typedef struct
     uint8_t diasSemana;
 } HorarioConfig;
 
-/* Configuración persistente de un medicamento, guardable en EEPROM. */
+/* Configuracion persistente de un medicamento, guardable en EEPROM. */
 typedef struct
 {
     char nombre[MAX_NOMBRES_MEDICAMENTOS]; //23 caracteres mas el nulo
@@ -40,7 +32,7 @@ typedef struct
     uint8_t horariosUsados;
 } MedicConfig;
 
-/* Estado de un horario durante el día que se está ejecutando. */
+/* Estado de un horario durante el dia que se esta ejecutando. */
 typedef enum
 {
     PROGRAMADA,
@@ -49,23 +41,23 @@ typedef enum
     EXPIRADA,
 } EstadoToma;
 
-/* Estado transitorio en RAM; no forma parte de la configuración permanente. */
+/* Estado transitorio en RAM; no forma parte de la configuracion permanente. */
 typedef struct
 {
     EstadoToma estado;
     bool expiracionPendienteRegistro;
 } EstadoDiarioHorario;
 
-/* Carga la configuración y prepara los estados diarios en RAM. */
+/* Carga la configuracion y prepara los estados diarios en RAM. */
 void inicializarMedicacion(void);
-/* Actualiza estados por hora, día semanal y vencimiento de cada toma. */
+/* Actualiza estados por hora, dia semanal y vencimiento de cada toma. */
 void gestionarMedicacion(void);
 
 /* Guarda o recupera la configuracion permanente de los medicamentos. */
 bool cargarConfiguracionMedicacion(void);
 bool guardarConfiguracionMedicacion(void);
 
-/* Verifica firma y versión antes de confiar en los datos de EEPROM. */
+/* Verifica firma y version antes de confiar en los datos de EEPROM. */
 bool hayConfiguracionMedicacion(void);
 const MedicConfig *obtenerMedicamentoConfigurado(uint8_t indiceMedicamento);
 /* Permite al editor consultar tambien medicamentos desactivados. */
@@ -88,7 +80,7 @@ uint8_t contarTomasDelDia(void);
 bool obtenerTomaDelDiaPorOrden(uint8_t orden, uint8_t *indiceMedicamento,
                                 uint8_t *indiceHorario);
 
-/* Operaciones de edición en RAM; guardarConfiguracionMedicacion confirma cambios. */
+/* Operaciones de edicion en RAM; guardarConfiguracionMedicacion confirma cambios. */
 bool crearMedicamento(uint8_t indiceMedicamento, const char *nombre);
 bool editarNombreMedicamento(uint8_t indiceMedicamento, const char *nombre);
 bool restaurarMedicamento(uint8_t indiceMedicamento, const MedicConfig *respaldo);

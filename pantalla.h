@@ -23,7 +23,7 @@ void dibujarPantallaDiasHorario(void);
 void iniciarEdicionNombreMedicamento(const char *nombreInicial);
 const char *obtenerNombreEdicionMedicamento(void);
 void dibujarPantallaNombreMedicamento(void);
-/* Etiquetas táctiles publicadas por pantalla.c para que main.c procese acciones. */
+/* Etiquetas tactiles publicadas por pantalla.c para que main.c procese acciones. */
 extern int BotonAceptarFechaHora;
 extern int BotonCuidador;
 extern int BotonVolver;
@@ -48,11 +48,11 @@ extern int BotonHoraMenos;
 extern int BotonHoraMas;
 extern int BotonMinutoMenos;
 extern int BotonMinutoMas;
-/* Selección actual dentro del editor de medicamento y horarios. */
+/* Seleccion actual dentro del editor de medicamento y horarios. */
 extern uint8_t IndiceMedicamentoEdicion;
 extern uint8_t IndiceHorarioEdicion;
 extern uint8_t DiaHorarioEdicion;
-/* Toma seleccionada desde la lista del cuidador para su confirmación. */
+/* Toma seleccionada desde la lista del cuidador para su confirmacion. */
 extern int BotonConfirmarToma;
 extern uint8_t IndiceMedicamentoConfirmar;
 extern uint8_t IndiceHorarioConfirmar;

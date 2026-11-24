@@ -1,6 +1,6 @@
 #include "reloj.h"
 
-/* Estado privado del reloj: solo este módulo puede modificar fecha y hora. */
+/* Estado privado del reloj: solo este modulo puede modificar fecha y hora. */
 static uint8_t horas;
 static uint8_t minutos;
 static uint8_t segundos;
@@ -91,7 +91,7 @@ static void avanzarFecha(void)
     diaSemanaActual = calcularDiaSemana(diaMes, mesActual, anioActual);
 }
 
-/* Deja el reloj sin configurar hasta que la interfaz reciba una fecha válida. */
+/* Deja el reloj sin configurar hasta que la interfaz reciba una fecha valida. */
 void inicializarReloj(void)
 {
     horas = 0U;
@@ -105,7 +105,7 @@ void inicializarReloj(void)
     relojConfigurado = false;
 }
 
-/* Avanza exactamente un segundo y propaga los cambios de minuto, día, mes y año. */
+/* Avanza exactamente un segundo y propaga los cambios de minuto, dia, mes y año. */
 void actualizarReloj(void)
 {
     /* No se contabiliza tiempo hasta que la pantalla inicial acepta una fecha valida. */
